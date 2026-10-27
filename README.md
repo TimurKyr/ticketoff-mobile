@@ -8,9 +8,34 @@ Ticket-verification app for **ticketoff** Event Admins (academic MVP).
 - **API client:** generated from backend `/openapi.json` via openapi-generator (dart-dio).
 
 ## Getting started
+
+The app starts on the Events screen and requests `GET /health` from the
+configured backend. For the Android emulator the default URL is
+`http://10.0.2.2:8000`; override it for another environment with
+`--dart-define=API_BASE_URL=https://api.example.com`.
+
 ```bash
-# TODO (Mobile, week 1): flutter pub get && flutter run
+flutter pub get
+flutter run
 ```
+
+## API client generation
+
+Install OpenAPI Generator CLI with the `dart-dio` generator available, then run
+the script from the repository root:
+
+```bash
+bash tool/gen_api.sh
+```
+
+The generator reads `http://localhost:8000/openapi.json` by default. Set
+`OPENAPI_URL` to use another backend, for example:
+
+```bash
+OPENAPI_URL=https://api.example.com/openapi.json bash tool/gen_api.sh
+```
+
+Generated files are written to `lib/generated/api/`.
 
 ## Conventions
 Branching, commits, and PR rules: see CONTRIBUTING.md (WIP).
