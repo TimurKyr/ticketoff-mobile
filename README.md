@@ -9,8 +9,12 @@ Ticket-verification app for **ticketoff** Event Admins (academic MVP).
 
 ## Getting started
 
-The app starts on the Events screen and requests `GET /health` from the
-configured backend. For the Android emulator the default URL is
+The app starts with a role selection. Controllers sign in with their account
+email and password; the access token is stored securely and restored on the
+next launch. The Events screen loads only the signed-in controller's assigned
+events from `GET /checkin/my-events`. Guest selection is not connected yet.
+
+For the Android emulator the default API URL is
 `http://10.0.2.2:8000`; override it for another environment with
 `--dart-define=API_BASE_URL=https://api.example.com`.
 
