@@ -23,6 +23,8 @@ class AssignedEvent {
       status: _requiredString(json, 'status'),
       startAt: DateTime.parse(_requiredString(json, 'start_at')),
       endAt: endAt == null ? null : DateTime.parse(endAt),
+      venueName: _optionalString(json, 'venue_name'),
+      venueAddress: _optionalString(json, 'venue_address'),
     );
   }
 
@@ -75,5 +77,11 @@ class AssignedEvent {
       throw FormatException('Missing or invalid "$key" in event response');
     }
     return value;
+  }
+
+  static String? _optionalString(Map<String, dynamic> json, String key) {
+    final value = json[key];
+    if (value == null || value is String) return value as String?;
+    throw FormatException('Invalid "$key" in event response');
   }
 }

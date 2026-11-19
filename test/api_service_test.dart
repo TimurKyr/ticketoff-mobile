@@ -7,6 +7,7 @@ import 'package:ticketoff_mobile/core/api/auth_service.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
 import 'package:ticketoff_mobile/core/api/dio_client.dart';
 import 'package:ticketoff_mobile/core/storage/secure_storage.dart';
+import 'package:ticketoff_mobile/features/scan/scan_result.dart';
 
 class _MemoryTokenStorage implements TokenStorage {
   String? token;
@@ -111,90 +112,79 @@ void main() {
     dio.close();
   });
 
-  test(
-    'events are loaded only from my-events and venue data is joined',
-    () async {
-      final storage = _MemoryTokenStorage()..token = 'session-token';
-      final requests = <RequestOptions>[];
-      final dioClient = DioClient(secureStorage: storage);
-      dioClient.dio.options.baseUrl = 'https://api.test';
-      dioClient.dio.httpClientAdapter = _TestAdapter((request, body) async {
-        requests.add(request);
-        return switch (request.path) {
-          '/checkin/my-events' => _jsonResponse([
-            {
-              'id': 'assigned-event',
-              'title': 'Назначенное событие',
-              'status': 'published',
-              'start_at': '2026-11-09T14:00:00Z',
-              'end_at': null,
-              'is_owner': false,
-            },
-          ]),
-          '/venues' => _jsonResponse([
-            {
-              'id': 'venue-1',
-              'name': 'Главный зал',
-              'address': 'Улица 1',
-              'city': 'Город',
-              'timezone': 'UTC',
-            },
-          ]),
-          '/events/assigned-event' => _jsonResponse({'venue_id': 'venue-1'}),
-          _ => _jsonResponse({'detail': 'Not found'}, statusCode: 404),
-        };
+  test('assigned events include venue details in the same response', () async {
+    final storage = _MemoryTokenStorage()..token = 'session-token';
+    final client = DioClient(secureStorage: storage);
+    addTearDown(client.close);
+    client.dio.httpClientAdapter = _TestAdapter((request, body) async {
+      expect(request.path, '/checkin/my-events');
+      expect(request.headers['Authorization'], 'Bearer session-token');
+      return _jsonResponse([
+        {
+          'id': 'event-1',
+          'title': 'Concert',
+          'status': 'published',
+          'start_at': '2026-11-09T14:00:00Z',
+          'venue_name': 'Central Hall',
+          'venue_address': 'Main Street 1',
+        },
+      ]);
+    });
+    final events = await CheckinService(client.dio).fetchMyEvents();
+    expect(events.single.venueLabel, 'Central Hall, Main Street 1');
+  });
+
+  test('scan sends the event and QR and parses every result', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.test'));
+    addTearDown(dio.close);
+    for (final outcome in ScanOutcome.values) {
+      dio.httpClientAdapter = _TestAdapter((request, body) async {
+        expect(request.method, 'POST');
+        expect(request.path, '/checkin/scan');
+        expect(jsonDecode(utf8.decode(body)), {
+          'event_id': 'event-1',
+          'qr_token': 'valid-qr',
+        });
+        return _jsonResponse({
+          'result': outcome.apiValue,
+          'checked_in_count': 2,
+          'total_count': 5,
+          'ticket': outcome == ScanOutcome.checkedIn
+              ? {'attendee_name': 'Dana', 'ticket_type': 'VIP'}
+              : null,
+        });
       });
+      final result = await CheckinService(dio).scan('event-1', 'valid-qr');
+      expect(result.outcome, outcome);
+      expect(result.count.checkedIn, 2);
+      expect(result.count.total, 5);
+      if (outcome == ScanOutcome.checkedIn) {
+        expect(result.attendeeName, 'Dana');
+        expect(result.ticketType, 'VIP');
+      }
+    }
+  });
 
-      final events = await CheckinService(dioClient.dio).fetchMyEvents();
-
-      expect(events, hasLength(1));
-      expect(events.single.id, 'assigned-event');
-      expect(events.single.venueLabel, 'Главный зал, Улица 1, Город');
-      expect(
-        requests.map((request) => request.path),
-        containsAll([
-          '/checkin/my-events',
-          '/venues',
-          '/events/assigned-event',
-        ]),
+  test(
+    'scan gives a readable message when the event is inaccessible',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
+        ..httpClientAdapter = _TestAdapter(
+          (_, _) async => _jsonResponse({}, statusCode: 404),
+        );
+      addTearDown(dio.close);
+      await expectLater(
+        CheckinService(dio).scan('missing-event', 'qr'),
+        throwsA(
+          isA<ScanFailure>().having(
+            (error) => error.message,
+            'message',
+            'Событие не найдено или нет доступа',
+          ),
+        ),
       );
-      expect(
-        requests.map((request) => request.headers['Authorization']),
-        everyElement('Bearer session-token'),
-      );
-      dioClient.close();
     },
   );
-
-  test('private event details do not hide the assigned event list', () async {
-    final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
-      ..httpClientAdapter = _TestAdapter((request, body) async {
-        return switch (request.path) {
-          '/checkin/my-events' => _jsonResponse([
-            {
-              'id': 'private-event',
-              'title': 'Приватное событие',
-              'status': 'published',
-              'start_at': '2026-11-09T14:00:00Z',
-              'end_at': null,
-              'is_owner': false,
-            },
-          ]),
-          '/venues' => _jsonResponse([]),
-          '/events/private-event' => _jsonResponse({
-            'detail': 'Event not found',
-          }, statusCode: 404),
-          _ => _jsonResponse({'detail': 'Not found'}, statusCode: 404),
-        };
-      });
-
-    final events = await CheckinService(dio).fetchMyEvents();
-
-    expect(events, hasLength(1));
-    expect(events.single.title, 'Приватное событие');
-    expect(events.single.venueMessage, 'Площадка недоступна');
-    dio.close();
-  });
 
   test(
     'expired token is cleared and triggers the unauthorized handler',
