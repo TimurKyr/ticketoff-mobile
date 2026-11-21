@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:ticketoff_mobile/features/attendees/attendee.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
 import 'package:ticketoff_mobile/features/scan/scan_result.dart';
 
@@ -9,6 +10,23 @@ abstract interface class AssignedEventsRepository {
 abstract interface class ScanRepository {
   Future<ScanResult> scan(String eventId, String token);
   Future<CheckinCount> fetchCount(String eventId);
+}
+
+abstract interface class AttendeesRepository {
+  Future<AttendeePage> fetchAttendees(
+    String eventId, {
+    required String query,
+    required int offset,
+  });
+  Future<EventStats> fetchStats(String eventId);
+  Future<ScanResult> checkInTicket(String ticketId);
+  Future<TicketStatus> undoCheckIn(String ticketId);
+}
+
+class AttendeesFailure implements Exception {
+  const AttendeesFailure(this.message);
+
+  final String message;
 }
 
 class EventLoadFailure implements Exception {
@@ -26,7 +44,8 @@ class ScanFailure implements Exception {
   final String message;
 }
 
-class CheckinService implements AssignedEventsRepository, ScanRepository {
+class CheckinService
+    implements AssignedEventsRepository, ScanRepository, AttendeesRepository {
   const CheckinService(this._dio);
 
   final Dio _dio;
@@ -78,12 +97,106 @@ class CheckinService implements AssignedEventsRepository, ScanRepository {
 
   @override
   Future<CheckinCount> fetchCount(String eventId) async {
+    final stats = await fetchStats(eventId);
+    return CheckinCount(stats.checkedIn, stats.registered);
+  }
+
+  @override
+  Future<AttendeePage> fetchAttendees(
+    String eventId, {
+    required String query,
+    required int offset,
+  }) => _attendeesRequest(() async {
+    final response = await _dio.get<Object?>(
+      '/checkin/events/$eventId/attendees',
+      queryParameters: {
+        if (query.isNotEmpty) 'q': query,
+        'limit': 30,
+        'offset': offset,
+      },
+    );
+    final data = _json(response.data);
+    final items = data['items'];
+    final total = data['total'];
+    final limit = data['limit'];
+    if (items is! List ||
+        total is! int ||
+        total < 0 ||
+        limit is! int ||
+        limit < 1 ||
+        limit > 100 ||
+        items.length > limit ||
+        data['offset'] != offset) {
+      throw const FormatException('Invalid attendee page');
+    }
+    final nextOffset = offset + items.length;
+    return AttendeePage(
+      items: [for (final item in items) Attendee.fromJson(_json(item))],
+      nextOffset: items.isNotEmpty && nextOffset < total ? nextOffset : null,
+    );
+  }, unavailable: 'Не удалось загрузить гостей');
+
+  @override
+  Future<EventStats> fetchStats(String eventId) => _attendeesRequest(() async {
     final response = await _dio.get<Object?>('/checkin/events/$eventId/stats');
     final data = _json(response.data);
+    final registered = data['registered'];
     final checkedIn = data['checked_in'];
-    final total = data['registered'];
-    if (checkedIn is! int || total is! int) throw const FormatException();
-    return CheckinCount(checkedIn, total);
+    final percent = data['percent'];
+    if (registered is! int || checkedIn is! int || percent is! num) {
+      throw const FormatException('Invalid check-in stats');
+    }
+    return EventStats(
+      registered: registered,
+      checkedIn: checkedIn,
+      percent: percent,
+    );
+  }, unavailable: 'Не удалось загрузить статистику');
+
+  @override
+  Future<ScanResult> checkInTicket(String ticketId) => _attendeesRequest(
+    () async {
+      final response = await _dio.post<Object?>(
+        '/checkin/tickets/$ticketId/check-in',
+      );
+      return ScanResult.fromJson(_json(response.data));
+    },
+    unavailable: 'Не удалось отметить вход',
+    notFound: 'Билет не найден или нет доступа',
+  );
+
+  @override
+  Future<TicketStatus> undoCheckIn(String ticketId) => _attendeesRequest(
+    () async {
+      final response = await _dio.post<Object?>(
+        '/checkin/tickets/$ticketId/undo',
+      );
+      final data = _json(response.data);
+      if (data['id'] != ticketId) {
+        throw const FormatException('Invalid check-in reversal');
+      }
+      return TicketStatus.fromJson(data['status']);
+    },
+    unavailable: 'Не удалось отменить отметку',
+    notFound: 'Билет не найден или нет доступа',
+  );
+
+  Future<T> _attendeesRequest<T>(
+    Future<T> Function() request, {
+    required String unavailable,
+    String notFound = 'Событие не найдено или нет доступа',
+  }) async {
+    try {
+      return await request();
+    } on DioException catch (error) {
+      throw AttendeesFailure(switch (error.response?.statusCode) {
+        404 => notFound,
+        null => 'Не удалось связаться с сервером',
+        _ => unavailable,
+      });
+    } on FormatException {
+      throw const AttendeesFailure('Сервер вернул некорректные данные');
+    }
   }
 
   Map<String, dynamic> _json(Object? value) {

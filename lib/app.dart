@@ -17,11 +17,13 @@ class TicketoffApp extends StatefulWidget {
     this.authGateway,
     this.eventsRepository,
     this.scanRepository,
+    this.attendeesRepository,
   });
 
   final AuthGateway? authGateway;
   final AssignedEventsRepository? eventsRepository;
   final ScanRepository? scanRepository;
+  final AttendeesRepository? attendeesRepository;
 
   @override
   State<TicketoffApp> createState() => _TicketoffAppState();
@@ -43,6 +45,8 @@ class _TicketoffAppState extends State<TicketoffApp> {
   late final CheckinService _checkinService = CheckinService(_dioClient.dio);
   late final ScanRepository _scanRepository =
       widget.scanRepository ?? _checkinService;
+  late final AttendeesRepository _attendeesRepository =
+      widget.attendeesRepository ?? _checkinService;
 
   late final GoRouter _router = GoRouter(
     initialLocation: '/',
@@ -83,8 +87,15 @@ class _TicketoffAppState extends State<TicketoffApp> {
         ),
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            AdminNavigationShell(navigationShell: navigationShell),
+        builder: (context, state, navigationShell) {
+          final segments = state.uri.pathSegments;
+          return AdminNavigationShell(
+            navigationShell: navigationShell,
+            scanEventId: segments.length == 2 && segments.first == 'scan'
+                ? segments.last
+                : null,
+          );
+        },
         branches: [
           StatefulShellBranch(
             routes: [
@@ -121,7 +132,21 @@ class _TicketoffAppState extends State<TicketoffApp> {
             routes: [
               GoRoute(
                 path: '/attendees',
-                builder: (context, state) => AttendeesScreen(onLogout: _logout),
+                builder: (context, state) => AttendeesScreen(
+                  repository: _attendeesRepository,
+                  onLogout: _logout,
+                ),
+                routes: [
+                  GoRoute(
+                    path: ':eventId',
+                    builder: (context, state) => AttendeesScreen(
+                      key: ValueKey(state.pathParameters['eventId']),
+                      eventId: state.pathParameters['eventId']!,
+                      repository: _attendeesRepository,
+                      onLogout: _logout,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -183,9 +208,14 @@ class _TicketoffAppState extends State<TicketoffApp> {
 }
 
 class AdminNavigationShell extends StatelessWidget {
-  const AdminNavigationShell({super.key, required this.navigationShell});
+  const AdminNavigationShell({
+    super.key,
+    required this.navigationShell,
+    this.scanEventId,
+  });
 
   final StatefulNavigationShell navigationShell;
+  final String? scanEventId;
 
   @override
   Widget build(BuildContext context) {
@@ -194,6 +224,11 @@ class AdminNavigationShell extends StatelessWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) {
+          if (index == 2 && index == navigationShell.currentIndex) return;
+          if (scanEventId case final eventId? when index == 2) {
+            context.go('/attendees/${Uri.encodeComponent(eventId)}');
+            return;
+          }
           navigationShell.goBranch(
             index,
             initialLocation: index == navigationShell.currentIndex,
@@ -213,7 +248,7 @@ class AdminNavigationShell extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.people_outline),
             selectedIcon: Icon(Icons.people),
-            label: 'Участники',
+            label: 'Гости',
           ),
         ],
       ),

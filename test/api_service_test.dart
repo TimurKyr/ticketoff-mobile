@@ -7,6 +7,7 @@ import 'package:ticketoff_mobile/core/api/auth_service.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
 import 'package:ticketoff_mobile/core/api/dio_client.dart';
 import 'package:ticketoff_mobile/core/storage/secure_storage.dart';
+import 'package:ticketoff_mobile/features/attendees/attendee.dart';
 import 'package:ticketoff_mobile/features/scan/scan_result.dart';
 
 class _MemoryTokenStorage implements TokenStorage {
@@ -59,6 +60,135 @@ ResponseBody _jsonResponse(Object data, {int statusCode = 200}) {
 }
 
 void main() {
+  test('event stats preserve the server percentage', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
+      ..httpClientAdapter = _TestAdapter((request, _) async {
+        expect(request.path, '/checkin/events/event-1/stats');
+        return _jsonResponse({
+          'registered': 3,
+          'checked_in': 1,
+          'absent': 2,
+          'percent': 33.3,
+        });
+      });
+    addTearDown(dio.close);
+    final stats = await CheckinService(dio).fetchStats('event-1');
+    expect(stats.registered, 3);
+    expect(stats.checkedIn, 1);
+    expect(stats.percent, 33.3);
+  });
+
+  test('attendee search uses the paginated BE-15 contract', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
+      ..httpClientAdapter = _TestAdapter((request, _) async {
+        expect(request.method, 'GET');
+        expect(request.path, '/checkin/events/event-1/attendees');
+        expect(request.queryParameters, {
+          'q': 'Dana@example.com',
+          'offset': 30,
+          'limit': 30,
+        });
+        return _jsonResponse({
+          'items': [
+            {
+              'ticket_id': 'ticket-1',
+              'attendee_name': 'Dana',
+              'attendee_email': 'Dana@example.com',
+              'ticket_type': 'VIP',
+              'status': 'checked_in',
+            },
+          ],
+          'total': 32,
+          'limit': 30,
+          'offset': 30,
+        });
+      });
+    addTearDown(dio.close);
+    final page = await CheckinService(
+      dio,
+    ).fetchAttendees('event-1', query: 'Dana@example.com', offset: 30);
+    expect(page.nextOffset, 31);
+    expect(page.items.single.email, 'Dana@example.com');
+    expect(page.items.single.status, TicketStatus.checkedIn);
+  });
+
+  test('undo returns the updated status and maps a forbidden ticket', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
+      ..httpClientAdapter = _TestAdapter((request, _) async {
+        expect(request.method, 'POST');
+        return switch (request.path) {
+          '/checkin/tickets/ticket-1/undo' => _jsonResponse({
+            'id': 'ticket-1',
+            'status': 'valid',
+          }),
+          _ => _jsonResponse({}, statusCode: 404),
+        };
+      });
+    addTearDown(dio.close);
+    final service = CheckinService(dio);
+    expect(await service.undoCheckIn('ticket-1'), TicketStatus.valid);
+    await expectLater(
+      service.undoCheckIn('another-ticket'),
+      throwsA(
+        isA<AttendeesFailure>().having(
+          (failure) => failure.message,
+          'message',
+          'Билет не найден или нет доступа',
+        ),
+      ),
+    );
+  });
+
+  test('manual check-in sends a ticket ID without a QR token', () async {
+    final storage = _MemoryTokenStorage()..token = 'session-token';
+    final client = DioClient(secureStorage: storage);
+    addTearDown(client.close);
+    client.dio.httpClientAdapter = _TestAdapter((request, body) async {
+      expect(request.method, 'POST');
+      expect(request.headers['Authorization'], 'Bearer session-token');
+      expect(request.queryParameters, isEmpty);
+      expect(body, isEmpty);
+      return switch (request.path) {
+        '/checkin/tickets/ticket-1/check-in' => _jsonResponse({
+          'result': 'checked_in',
+          'ticket': {
+            'id': 'ticket-1',
+            'attendee_name': 'Dana',
+            'ticket_type': 'VIP',
+            'seat_id': null,
+            'status': 'checked_in',
+          },
+          'checked_in_count': 1,
+          'total_count': 4,
+        }),
+        '/checkin/tickets/ticket-2/check-in' => _jsonResponse({
+          'result': 'event_cancelled',
+          'ticket': null,
+          'checked_in_count': 0,
+          'total_count': 4,
+        }),
+        _ => _jsonResponse({}, statusCode: 404),
+      };
+    });
+    final service = CheckinService(client.dio);
+    final admitted = await service.checkInTicket('ticket-1');
+    expect(admitted.outcome, ScanOutcome.checkedIn);
+    expect(admitted.count.checkedIn, 1);
+    final rejected = await service.checkInTicket('ticket-2');
+    expect(rejected.outcome, ScanOutcome.eventCancelled);
+    expect(rejected.count.checkedIn, 0);
+    await expectLater(
+      service.checkInTicket('foreign-ticket'),
+      throwsA(
+        isA<AttendeesFailure>().having(
+          (failure) => failure.message,
+          'message',
+          'Билет не найден или нет доступа',
+        ),
+      ),
+    );
+  });
+
   test(
     'login sends form-urlencoded credentials and stores the access token',
     () async {

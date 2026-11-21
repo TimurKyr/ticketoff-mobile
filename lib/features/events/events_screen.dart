@@ -133,6 +133,16 @@ class _EventCard extends StatelessWidget {
                     event.venueMessage ??
                     'Площадка не указана',
               ),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton.icon(
+                  key: Key('event-guests-${event.id}'),
+                  onPressed: () =>
+                      context.go('/attendees/${Uri.encodeComponent(event.id)}'),
+                  icon: const Icon(Icons.people_outline),
+                  label: const Text('Гости события'),
+                ),
+              ),
             ],
           ),
         ),
