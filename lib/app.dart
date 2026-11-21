@@ -12,10 +12,16 @@ import 'package:ticketoff_mobile/features/events/events_screen.dart';
 import 'package:ticketoff_mobile/features/scan/scan_screen.dart';
 
 class TicketoffApp extends StatefulWidget {
-  const TicketoffApp({super.key, this.authGateway, this.eventsRepository});
+  const TicketoffApp({
+    super.key,
+    this.authGateway,
+    this.eventsRepository,
+    this.scanRepository,
+  });
 
   final AuthGateway? authGateway;
   final AssignedEventsRepository? eventsRepository;
+  final ScanRepository? scanRepository;
 
   @override
   State<TicketoffApp> createState() => _TicketoffAppState();
@@ -33,7 +39,10 @@ class _TicketoffAppState extends State<TicketoffApp> {
   late final AuthGateway _authGateway =
       widget.authGateway ?? AuthService(_dioClient.dio, _secureStorage);
   late final AssignedEventsRepository _eventsRepository =
-      widget.eventsRepository ?? CheckinService(_dioClient.dio);
+      widget.eventsRepository ?? _checkinService;
+  late final CheckinService _checkinService = CheckinService(_dioClient.dio);
+  late final ScanRepository _scanRepository =
+      widget.scanRepository ?? _checkinService;
 
   late final GoRouter _router = GoRouter(
     initialLocation: '/',
@@ -92,12 +101,15 @@ class _TicketoffAppState extends State<TicketoffApp> {
             routes: [
               GoRoute(
                 path: '/scan',
-                builder: (context, state) => ScanScreen(onLogout: _logout),
+                builder: (context, state) =>
+                    ScanScreen(repository: _scanRepository, onLogout: _logout),
                 routes: [
                   GoRoute(
                     path: ':eventId',
                     builder: (context, state) => ScanScreen(
+                      key: ValueKey(state.pathParameters['eventId']),
                       eventId: state.pathParameters['eventId']!,
+                      repository: _scanRepository,
                       onLogout: _logout,
                     ),
                   ),

@@ -1,9 +1,21 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ticketoff_mobile/app.dart';
 import 'package:ticketoff_mobile/core/api/auth_service.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
+import 'package:ticketoff_mobile/features/scan/scan_result.dart';
+
+class _FakeScanRepository implements ScanRepository {
+  @override
+  Future<CheckinCount> fetchCount(String eventId) async =>
+      const CheckinCount(2, 5);
+
+  @override
+  Future<ScanResult> scan(String eventId, String token) =>
+      throw UnimplementedError();
+}
 
 class _FakeAuthGateway implements AuthGateway {
   _FakeAuthGateway({this.authenticated = false});
@@ -53,10 +65,13 @@ AssignedEvent _event({
 void main() {
   testWidgets('controller logs in and sees assigned events', (tester) async {
     final auth = _FakeAuthGateway();
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     await tester.pumpWidget(
       TicketoffApp(
         authGateway: auth,
         eventsRepository: _FakeEventsRepository([_event()]),
+        scanRepository: _FakeScanRepository(),
       ),
     );
     await tester.pumpAndSettle();
@@ -104,7 +119,7 @@ void main() {
     await tester.tap(find.byKey(const Key('assigned-event-event-1')));
     await tester.pumpAndSettle();
     expect(find.text('Сканирование билетов'), findsOneWidget);
-    expect(find.text('Мероприятие: event-1'), findsOneWidget);
+    expect(find.text('Отмечено 2 из 5'), findsOneWidget);
   });
 
   testWidgets('restores saved controller session on startup', (tester) async {

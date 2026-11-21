@@ -1,8 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
+import 'package:ticketoff_mobile/features/scan/scan_result.dart';
 
 abstract interface class AssignedEventsRepository {
   Future<List<AssignedEvent>> fetchMyEvents();
+}
+
+abstract interface class ScanRepository {
+  Future<ScanResult> scan(String eventId, String token);
+  Future<CheckinCount> fetchCount(String eventId);
 }
 
 class EventLoadFailure implements Exception {
@@ -14,7 +20,13 @@ class EventLoadFailure implements Exception {
   String toString() => message;
 }
 
-class CheckinService implements AssignedEventsRepository {
+class ScanFailure implements Exception {
+  const ScanFailure(this.message);
+
+  final String message;
+}
+
+class CheckinService implements AssignedEventsRepository, ScanRepository {
   const CheckinService(this._dio);
 
   final Dio _dio;
@@ -23,122 +35,59 @@ class CheckinService implements AssignedEventsRepository {
   Future<List<AssignedEvent>> fetchMyEvents() async {
     try {
       final response = await _dio.get<Object?>('/checkin/my-events');
-      final data = response.data;
-      if (data is! List) {
-        throw const EventLoadFailure(
-          'Сервер вернул некорректный список событий',
-        );
-      }
-
-      final events = data
-          .map((item) => AssignedEvent.fromJson(_asJsonMap(item, 'event')))
-          .toList(growable: false);
-      if (events.isEmpty) return events;
-
-      final Response<Object?> venuesResponse;
-      try {
-        venuesResponse = await _dio.get<Object?>('/venues');
-      } on DioException catch (error) {
-        if (error.response?.statusCode == 401) rethrow;
-        return events
-            .map(
-              (event) => event.withVenueMessage(
-                'Не удалось загрузить информацию о площадке',
-              ),
-            )
-            .toList(growable: false);
-      }
-      final venuesData = venuesResponse.data;
-      if (venuesData is! List) {
-        return events
-            .map(
-              (event) => event.withVenueMessage(
-                'Сервер вернул некорректные данные площадки',
-              ),
-            )
-            .toList(growable: false);
-      }
-      final Map<String, Map<String, dynamic>> venues;
-      try {
-        venues = {
-          for (final item in venuesData)
-            _requiredString(_asJsonMap(item, 'venue'), 'id'): _asJsonMap(
-              item,
-              'venue',
-            ),
-        };
-      } on FormatException {
-        return events
-            .map(
-              (event) => event.withVenueMessage(
-                'Сервер вернул некорректные данные площадки',
-              ),
-            )
-            .toList(growable: false);
-      }
-
-      return await Future.wait(events.map((event) => _addVenue(event, venues)));
+      final events = response.data;
+      if (events is! List) throw const FormatException();
+      return [for (final event in events) AssignedEvent.fromJson(_json(event))];
     } on DioException catch (error) {
       if (error.response?.statusCode == 401) rethrow;
-      throw _eventsFailure(error);
-    } on FormatException catch (error) {
-      throw EventLoadFailure('Не удалось прочитать данные события: $error');
-    }
-  }
-
-  Future<AssignedEvent> _addVenue(
-    AssignedEvent event,
-    Map<String, Map<String, dynamic>> venues,
-  ) async {
-    try {
-      final response = await _dio.get<Object?>('/events/${event.id}');
-      final eventDetails = _asJsonMap(response.data, 'event details');
-      final venueId = eventDetails['venue_id'];
-      if (venueId is! String) {
-        return event.withVenueMessage('Площадка не указана');
-      }
-      final venue = venues[venueId];
-      return venue == null
-          ? event.withVenueMessage('Площадка не указана')
-          : event.withVenue(venue);
-    } on DioException catch (error) {
-      if (error.response?.statusCode == 401) rethrow;
-      return event.withVenueMessage(
-        error.response?.statusCode == 404
-            ? 'Площадка недоступна'
-            : 'Не удалось загрузить информацию о площадке',
+      final data = error.response?.data;
+      final detail = data is Map ? data['detail'] : null;
+      throw EventLoadFailure(
+        detail is String && detail.isNotEmpty
+            ? detail
+            : error.response == null
+            ? 'Не удалось подключиться к серверу'
+            : 'Не удалось загрузить мероприятия (${error.response?.statusCode})',
       );
     } on FormatException {
-      return event.withVenueMessage(
-        'Сервер вернул некорректные данные площадки',
+      throw const EventLoadFailure(
+        'Сервер вернул некорректный список мероприятий',
       );
     }
   }
 
-  EventLoadFailure _eventsFailure(DioException error) {
-    if (error.response == null) {
-      return const EventLoadFailure('Не удалось подключиться к серверу');
+  @override
+  Future<ScanResult> scan(String eventId, String token) async {
+    try {
+      final response = await _dio.post<Object?>(
+        '/checkin/scan',
+        data: {'event_id': eventId, 'qr_token': token},
+      );
+      return ScanResult.fromJson(_json(response.data));
+    } on DioException catch (error) {
+      throw ScanFailure(switch (error.response?.statusCode) {
+        404 => 'Событие не найдено или нет доступа',
+        422 => 'Недействителен',
+        null => 'Не удалось связаться с сервером. Попробуйте ещё раз.',
+        _ => 'Не удалось проверить билет. Попробуйте ещё раз.',
+      });
+    } on FormatException {
+      throw const ScanFailure('Сервер вернул неизвестный результат проверки');
     }
-    final data = error.response?.data;
-    final detail = data is Map<String, dynamic> ? data['detail'] : null;
-    if (detail is String && detail.isNotEmpty) {
-      return EventLoadFailure(detail);
-    }
-    return EventLoadFailure(
-      'Не удалось загрузить события (${error.response?.statusCode})',
-    );
   }
 
-  Map<String, dynamic> _asJsonMap(Object? value, String name) {
+  @override
+  Future<CheckinCount> fetchCount(String eventId) async {
+    final response = await _dio.get<Object?>('/checkin/events/$eventId/stats');
+    final data = _json(response.data);
+    final checkedIn = data['checked_in'];
+    final total = data['registered'];
+    if (checkedIn is! int || total is! int) throw const FormatException();
+    return CheckinCount(checkedIn, total);
+  }
+
+  Map<String, dynamic> _json(Object? value) {
     if (value is Map<String, dynamic>) return value;
-    throw FormatException('Invalid $name object');
-  }
-
-  String _requiredString(Map<String, dynamic> json, String key) {
-    final value = json[key];
-    if (value is! String || value.isEmpty) {
-      throw FormatException('Missing or invalid "$key"');
-    }
-    return value;
+    throw const FormatException('Invalid check-in response');
   }
 }
