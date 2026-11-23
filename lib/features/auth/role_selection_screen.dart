@@ -51,7 +51,7 @@ class RoleSelectionScreen extends StatelessWidget {
                     icon: Icons.person_outline_rounded,
                     title: 'Гость',
                     description: 'Просмотр мероприятий',
-                    onTap: () {},
+                    onTap: () => context.push('/guest'),
                   ),
                   const SizedBox(height: 14),
                   _RoleCard(

@@ -10,12 +10,12 @@ import 'package:ticketoff_mobile/features/scan/scan_result.dart';
 class AttendeesScreen extends StatefulWidget {
   const AttendeesScreen({
     super.key,
-    this.eventId,
+    required this.eventId,
     required this.repository,
     required this.onLogout,
   });
 
-  final String? eventId;
+  final String eventId;
   final AttendeesRepository repository;
   final Future<void> Function() onLogout;
 
@@ -46,7 +46,7 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final visible = TickerMode.valuesOf(context).enabled;
-    if (visible && !_visible && widget.eventId != null) _refresh();
+    if (visible && !_visible) _refresh();
     _visible = visible;
   }
 
@@ -56,7 +56,7 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
   }
 
   void _refreshStats() {
-    final stats = widget.repository.fetchStats(widget.eventId!);
+    final stats = widget.repository.fetchStats(widget.eventId);
     setState(() {
       _stats = stats;
     });
@@ -104,7 +104,7 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
 
     try {
       final page = await widget.repository.fetchAttendees(
-        widget.eventId!,
+        widget.eventId,
         query: _query,
         offset: offset,
       );
@@ -222,83 +222,74 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
       appBar: AppBar(
         title: const Text('Гости'),
         actions: [
-          if (eventId != null)
-            IconButton(
-              tooltip: 'Открыть сканер события',
-              onPressed: () =>
-                  context.go('/scan/${Uri.encodeComponent(eventId)}'),
-              icon: const Icon(Icons.qr_code_scanner),
-            ),
+          IconButton(
+            tooltip: 'Открыть сканер события',
+            onPressed: () =>
+                context.go('/events/${Uri.encodeComponent(eventId)}/scan'),
+            icon: const Icon(Icons.qr_code_scanner),
+          ),
           LogoutAction(onLogout: widget.onLogout),
         ],
       ),
       body: SafeArea(
-        child: eventId == null
-            ? Center(
-                child: FilledButton(
-                  onPressed: () => context.go('/events'),
-                  child: const Text('Выбрать мероприятие'),
+        child: Column(
+          children: [
+            FutureBuilder<EventStats>(
+              future: _stats,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const LinearProgressIndicator();
+                }
+                if (snapshot.hasError) {
+                  return _RetryNotice(
+                    message: (snapshot.error! as AttendeesFailure).message,
+                    onRetry: _refreshStats,
+                  );
+                }
+                final stats = snapshot.data;
+                return stats == null
+                    ? const SizedBox.shrink()
+                    : _StatsPanel(stats: stats);
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: TextField(
+                key: const Key('attendees-search'),
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  labelText: 'Имя или email',
                 ),
-              )
-            : Column(
-                children: [
-                  FutureBuilder<EventStats>(
-                    future: _stats,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const LinearProgressIndicator();
-                      }
-                      if (snapshot.hasError) {
-                        return _RetryNotice(
-                          message:
-                              (snapshot.error! as AttendeesFailure).message,
-                          onRetry: _refreshStats,
-                        );
-                      }
-                      final stats = snapshot.data;
-                      return stats == null
-                          ? const SizedBox.shrink()
-                          : _StatsPanel(stats: stats);
-                    },
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: TextField(
-                      key: const Key('attendees-search'),
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        labelText: 'Имя или email',
-                      ),
-                      keyboardType: TextInputType.text,
-                      textInputAction: TextInputAction.search,
-                      onChanged: (value) =>
-                          _resetSearch(value.trim(), debounce: true),
-                      onSubmitted: (value) => _resetSearch(value.trim()),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      key: const Key('attendees-list'),
-                      controller: _scroll,
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      itemCount: _items.length + 1,
-                      itemBuilder: (context, index) {
-                        if (index == _items.length) return _listFooter();
-                        final attendee = _items[index];
-                        return _AttendeeCard(
-                          attendee: attendee,
-                          pending: _pendingTicketId == attendee.ticketId,
-                          onAction: _pendingTicketId == null
-                              ? () => _changeCheckIn(attendee)
-                              : null,
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.search,
+                onChanged: (value) =>
+                    _resetSearch(value.trim(), debounce: true),
+                onSubmitted: (value) => _resetSearch(value.trim()),
               ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                key: const Key('attendees-list'),
+                controller: _scroll,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                itemCount: _items.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == _items.length) return _listFooter();
+                  final attendee = _items[index];
+                  return _AttendeeCard(
+                    attendee: attendee,
+                    pending: _pendingTicketId == attendee.ticketId,
+                    onAction: _pendingTicketId == null
+                        ? () => _changeCheckIn(attendee)
+                        : null,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
