@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
 import 'package:ticketoff_mobile/features/auth/logout_action.dart';
+import 'package:ticketoff_mobile/features/offline/offline_checkin.dart';
+import 'package:ticketoff_mobile/features/offline/offline_status.dart';
 import 'package:ticketoff_mobile/features/scan/scan_result.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -13,11 +15,13 @@ class ScanScreen extends StatefulWidget {
     this.eventId,
     required this.repository,
     required this.onLogout,
+    this.offline,
   });
 
   final String? eventId;
   final ScanRepository repository;
   final Future<void> Function() onLogout;
+  final OfflineCheckin? offline;
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -71,7 +75,11 @@ class _ScanScreenState extends State<ScanScreen> {
       _receivedScanCount = true;
       _count = result.count;
       _outcome = result.outcome;
-      _message = result.outcome.label;
+      _message = switch ((result.outcome, result.offline)) {
+        (ScanOutcome.checkedIn, true) => 'Отмечен (офлайн)',
+        (ScanOutcome.alreadyUsed, true) => 'Уже отмечен',
+        _ => result.outcome.label,
+      };
       if (result.outcome == ScanOutcome.checkedIn) {
         _ticketDetails = '${result.attendeeName}\n${result.ticketType}';
       }
@@ -101,7 +109,6 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     final hasEvent = widget.eventId != null;
-    final count = _count;
     final (color, icon) = switch (_outcome) {
       ScanOutcome.checkedIn => (const Color(0xFF146C36), Icons.check_circle),
       ScanOutcome.alreadyUsed => (
@@ -125,15 +132,23 @@ class _ScanScreenState extends State<ScanScreen> {
               )
             : Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      count == null
-                          ? 'Отмечено — из —'
-                          : 'Отмечено ${count.checkedIn} из ${count.total}',
-                      style: Theme.of(context).textTheme.titleMedium,
+                  if (widget.offline case final offline?)
+                    ListenableBuilder(
+                      listenable: offline,
+                      builder: (context, _) => _countLabel(
+                        offline.countFor(widget.eventId!) ?? _count,
+                      ),
+                    )
+                  else
+                    _countLabel(_count),
+                  if (widget.offline case final offline?)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: OfflineStatus(
+                        offline: offline,
+                        eventId: widget.eventId!,
+                      ),
                     ),
-                  ),
                   Expanded(
                     child: Stack(
                       fit: StackFit.expand,
@@ -209,6 +224,16 @@ class _ScanScreenState extends State<ScanScreen> {
       ),
     );
   }
+
+  Widget _countLabel(CheckinCount? count) => Padding(
+    padding: const EdgeInsets.all(12),
+    child: Text(
+      count == null
+          ? 'Отмечено — из —'
+          : 'Отмечено ${count.checkedIn} из ${count.total}',
+      style: Theme.of(context).textTheme.titleMedium,
+    ),
+  );
 }
 
 class _CameraPreview extends StatefulWidget {

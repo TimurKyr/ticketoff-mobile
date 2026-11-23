@@ -4,16 +4,20 @@ import 'package:ticketoff_mobile/core/api/checkin_service.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 import 'package:ticketoff_mobile/features/auth/logout_action.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
+import 'package:ticketoff_mobile/features/offline/offline_checkin.dart';
+import 'package:ticketoff_mobile/features/offline/offline_status.dart';
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({
     super.key,
     required this.eventsRepository,
     required this.onLogout,
+    this.offline,
   });
 
   final AssignedEventsRepository eventsRepository;
   final Future<void> Function() onLogout;
+  final OfflineCheckin? offline;
 
   @override
   State<EventsScreen> createState() => _EventsScreenState();
@@ -21,11 +25,27 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   late Future<List<AssignedEvent>> _events;
+  bool _wasOffline = false;
 
   @override
   void initState() {
     super.initState();
     _events = widget.eventsRepository.fetchMyEvents();
+    _wasOffline = widget.offline?.isOffline ?? false;
+    widget.offline?.addListener(_connectionChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.offline?.removeListener(_connectionChanged);
+    super.dispose();
+  }
+
+  void _connectionChanged() {
+    final offline = widget.offline!.isOffline;
+    final recovered = _wasOffline && !offline;
+    _wasOffline = offline;
+    if (recovered) _retry();
   }
 
   void _retry() {
@@ -66,9 +86,11 @@ class _EventsScreenState extends State<EventsScreen> {
 
             final events = snapshot.data ?? const <AssignedEvent>[];
             if (events.isEmpty) {
-              return const _MessageState(
+              return _MessageState(
                 icon: Icons.event_busy_outlined,
-                message: 'Вас пока не назначили ни на одно событие',
+                message: widget.offline?.isOffline == true
+                    ? 'Офлайн. Нет скачанных событий'
+                    : 'Вас пока не назначили ни на одно событие',
               );
             }
 
@@ -76,7 +98,8 @@ class _EventsScreenState extends State<EventsScreen> {
               padding: const EdgeInsets.all(20),
               itemCount: events.length,
               separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) => _EventCard(event: events[index]),
+              itemBuilder: (context, index) =>
+                  _EventCard(event: events[index], offline: widget.offline),
             );
           },
         ),
@@ -86,9 +109,10 @@ class _EventsScreenState extends State<EventsScreen> {
 }
 
 class _EventCard extends StatelessWidget {
-  const _EventCard({required this.event});
+  const _EventCard({required this.event, this.offline});
 
   final AssignedEvent event;
+  final OfflineCheckin? offline;
 
   @override
   Widget build(BuildContext context) {
@@ -133,6 +157,15 @@ class _EventCard extends StatelessWidget {
                     event.venueMessage ??
                     'Площадка не указана',
               ),
+              if (offline case final controller?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: OfflineStatus(
+                    offline: controller,
+                    eventId: event.id,
+                    downloadEvent: event,
+                  ),
+                ),
               Align(
                 alignment: AlignmentDirectional.centerEnd,
                 child: TextButton.icon(

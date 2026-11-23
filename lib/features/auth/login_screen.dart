@@ -11,7 +11,7 @@ class LoginScreen extends StatefulWidget {
   });
 
   final AuthGateway authGateway;
-  final VoidCallback onAuthenticated;
+  final Future<void> Function() onAuthenticated;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _emailController.text.trim(),
         _passwordController.text,
       );
-      if (mounted) widget.onAuthenticated();
+      if (mounted) await widget.onAuthenticated();
     } on AuthFailure catch (error) {
       if (mounted) setState(() => _loginError = error.message);
     } on SessionFailure catch (error) {

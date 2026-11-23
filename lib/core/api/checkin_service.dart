@@ -30,19 +30,36 @@ class AttendeesFailure implements Exception {
 }
 
 class EventLoadFailure implements Exception {
-  const EventLoadFailure(this.message);
+  const EventLoadFailure(this.message, {this.connectionLost = false});
 
   final String message;
+  final bool connectionLost;
 
   @override
   String toString() => message;
 }
 
 class ScanFailure implements Exception {
-  const ScanFailure(this.message);
+  const ScanFailure(
+    this.message, {
+    this.connectionLost = false,
+    this.statusCode,
+  });
 
   final String message;
+  final bool connectionLost;
+  final int? statusCode;
 }
+
+bool isConnectionFailure(DioException error) =>
+    error.response == null &&
+    switch (error.type) {
+      DioExceptionType.connectionError ||
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout => true,
+      _ => false,
+    };
 
 class CheckinService
     implements AssignedEventsRepository, ScanRepository, AttendeesRepository {
@@ -67,6 +84,7 @@ class CheckinService
             : error.response == null
             ? 'Не удалось подключиться к серверу'
             : 'Не удалось загрузить мероприятия (${error.response?.statusCode})',
+        connectionLost: isConnectionFailure(error),
       );
     } on FormatException {
       throw const EventLoadFailure(
@@ -84,12 +102,16 @@ class CheckinService
       );
       return ScanResult.fromJson(_json(response.data));
     } on DioException catch (error) {
-      throw ScanFailure(switch (error.response?.statusCode) {
-        404 => 'Событие не найдено или нет доступа',
-        422 => 'Недействителен',
-        null => 'Не удалось связаться с сервером. Попробуйте ещё раз.',
-        _ => 'Не удалось проверить билет. Попробуйте ещё раз.',
-      });
+      throw ScanFailure(
+        switch (error.response?.statusCode) {
+          404 => 'Событие не найдено или нет доступа',
+          422 => 'Недействителен',
+          null => 'Не удалось связаться с сервером. Попробуйте ещё раз.',
+          _ => 'Не удалось проверить билет. Попробуйте ещё раз.',
+        },
+        connectionLost: isConnectionFailure(error),
+        statusCode: error.response?.statusCode,
+      );
     } on FormatException {
       throw const ScanFailure('Сервер вернул неизвестный результат проверки');
     }

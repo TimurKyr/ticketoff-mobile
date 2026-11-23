@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ticketoff_mobile/core/api/auth_service.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
@@ -9,6 +11,8 @@ import 'package:ticketoff_mobile/features/attendees/attendees_screen.dart';
 import 'package:ticketoff_mobile/features/auth/login_screen.dart';
 import 'package:ticketoff_mobile/features/auth/role_selection_screen.dart';
 import 'package:ticketoff_mobile/features/events/events_screen.dart';
+import 'package:ticketoff_mobile/features/offline/offline_checkin.dart';
+import 'package:ticketoff_mobile/features/offline/offline_store.dart';
 import 'package:ticketoff_mobile/features/scan/scan_screen.dart';
 
 class TicketoffApp extends StatefulWidget {
@@ -29,9 +33,12 @@ class TicketoffApp extends StatefulWidget {
   State<TicketoffApp> createState() => _TicketoffAppState();
 }
 
-class _TicketoffAppState extends State<TicketoffApp> {
+class _TicketoffAppState extends State<TicketoffApp>
+    with WidgetsBindingObserver {
   final ValueNotifier<bool?> _isAuthenticated = ValueNotifier(null);
   String? _sessionRestoreError;
+  OfflineCheckin? _offline;
+  late final _offlineStore = OfflineStore();
 
   late final SecureStorage _secureStorage = SecureStorage();
   late final DioClient _dioClient = DioClient(
@@ -83,7 +90,7 @@ class _TicketoffAppState extends State<TicketoffApp> {
         path: '/login',
         builder: (context, state) => LoginScreen(
           authGateway: _authGateway,
-          onAuthenticated: () => _isAuthenticated.value = true,
+          onAuthenticated: _finishAuthentication,
         ),
       ),
       StatefulShellRoute.indexedStack(
@@ -102,7 +109,8 @@ class _TicketoffAppState extends State<TicketoffApp> {
               GoRoute(
                 path: '/events',
                 builder: (context, state) => EventsScreen(
-                  eventsRepository: _eventsRepository,
+                  eventsRepository: _offline ?? _eventsRepository,
+                  offline: _offline,
                   onLogout: _logout,
                 ),
               ),
@@ -120,7 +128,8 @@ class _TicketoffAppState extends State<TicketoffApp> {
                     builder: (context, state) => ScanScreen(
                       key: ValueKey(state.pathParameters['eventId']),
                       eventId: state.pathParameters['eventId']!,
-                      repository: _scanRepository,
+                      repository: _offline ?? _scanRepository,
+                      offline: _offline,
                       onLogout: _logout,
                     ),
                   ),
@@ -158,6 +167,7 @@ class _TicketoffAppState extends State<TicketoffApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _restoreSession();
   }
 
@@ -165,12 +175,52 @@ class _TicketoffAppState extends State<TicketoffApp> {
     _sessionRestoreError = null;
     try {
       final hasSession = await _authGateway.hasSession();
-      if (mounted) _isAuthenticated.value = hasSession;
+      if (!mounted) return;
+      if (hasSession) {
+        await _finishAuthentication();
+      } else {
+        _isAuthenticated.value = false;
+      }
     } on SessionFailure catch (error) {
       if (!mounted) return;
       _sessionRestoreError = error.message;
       _isAuthenticated.value = false;
     }
+  }
+
+  Future<void> _finishAuthentication() async {
+    if (widget.authGateway == null &&
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS)) {
+      try {
+        final token = await _secureStorage.readToken();
+        if (!mounted) return;
+        if (token != null && token.isNotEmpty) {
+          _offline ??= OfflineCheckin(
+            account: OfflineCheckin.accountKey(
+              _dioClient.dio.options.baseUrl,
+              token,
+            ),
+            dio: _dioClient.dio,
+            store: _offlineStore,
+            scans: _scanRepository,
+            assignedEvents: _eventsRepository,
+          );
+        }
+      } on PlatformException {
+        throw const SessionFailure(
+          'Не удалось восстановить сохранённую сессию',
+        );
+      }
+    }
+    if (mounted) _isAuthenticated.value = true;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _offline?.setForeground(state == AppLifecycleState.resumed);
   }
 
   void _retrySessionRestore() {
@@ -180,17 +230,26 @@ class _TicketoffAppState extends State<TicketoffApp> {
 
   Future<void> _logout() async {
     await _authGateway.logout();
+    _endOfflineSession();
     _isAuthenticated.value = false;
     _router.go('/');
   }
 
   Future<void> _handleUnauthorized() async {
+    _endOfflineSession();
     _isAuthenticated.value = false;
     _router.go('/login');
   }
 
+  void _endOfflineSession() {
+    _offline?.dispose();
+    _offline = null;
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _endOfflineSession();
     _router.dispose();
     _isAuthenticated.dispose();
     _dioClient.close();
