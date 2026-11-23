@@ -13,11 +13,13 @@ class EventsScreen extends StatefulWidget {
     required this.eventsRepository,
     required this.onLogout,
     this.offline,
+    this.activeEventId,
   });
 
   final AssignedEventsRepository eventsRepository;
   final Future<void> Function() onLogout;
   final OfflineCheckin? offline;
+  final String? activeEventId;
 
   @override
   State<EventsScreen> createState() => _EventsScreenState();
@@ -25,14 +27,22 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   late Future<List<AssignedEvent>> _events;
+  String? _lastEventId;
   bool _wasOffline = false;
 
   @override
   void initState() {
     super.initState();
+    _lastEventId = widget.activeEventId;
     _events = widget.eventsRepository.fetchMyEvents();
     _wasOffline = widget.offline?.isOffline ?? false;
     widget.offline?.addListener(_connectionChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant EventsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _lastEventId = widget.activeEventId ?? _lastEventId;
   }
 
   @override
@@ -94,18 +104,76 @@ class _EventsScreenState extends State<EventsScreen> {
               );
             }
 
-            return ListView.separated(
-              padding: const EdgeInsets.all(20),
-              itemCount: events.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) =>
-                  _EventCard(event: events[index], offline: widget.offline),
+            final lastEvent = events
+                .where((event) => event.id == _lastEventId)
+                .firstOrNull;
+            return Column(
+              children: [
+                if (lastEvent != null) _PinnedEvent(event: lastEvent),
+                Expanded(
+                  child: ListView.separated(
+                    key: const Key('assigned-events-list'),
+                    padding: const EdgeInsets.all(20),
+                    itemCount: events.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 12),
+                    itemBuilder: (context, index) => _EventCard(
+                      event: events[index],
+                      offline: widget.offline,
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         ),
       ),
     );
   }
+}
+
+class _PinnedEvent extends StatelessWidget {
+  const _PinnedEvent({required this.event});
+
+  final AssignedEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: const Key('pinned-event'),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Card(
+        child: ListTile(
+          title: const Text('Последнее мероприятие'),
+          subtitle: Text(
+            event.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Сканер последнего мероприятия',
+                onPressed: () => _openEvent(context, event, 'scan'),
+                icon: const Icon(Icons.qr_code_scanner),
+              ),
+              IconButton(
+                tooltip: 'Гости последнего мероприятия',
+                onPressed: () => _openEvent(context, event, 'attendees'),
+                icon: const Icon(Icons.people_outline),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+void _openEvent(BuildContext context, AssignedEvent event, String screen) {
+  context.go('/events/${Uri.encodeComponent(event.id)}/$screen');
 }
 
 class _EventCard extends StatelessWidget {
@@ -120,7 +188,7 @@ class _EventCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         key: Key('assigned-event-${event.id}'),
-        onTap: () => context.go('/scan/${event.id}'),
+        onTap: () => _openEvent(context, event, 'scan'),
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -170,8 +238,7 @@ class _EventCard extends StatelessWidget {
                 alignment: AlignmentDirectional.centerEnd,
                 child: TextButton.icon(
                   key: Key('event-guests-${event.id}'),
-                  onPressed: () =>
-                      context.go('/attendees/${Uri.encodeComponent(event.id)}'),
+                  onPressed: () => _openEvent(context, event, 'attendees'),
                   icon: const Icon(Icons.people_outline),
                   label: const Text('Гости события'),
                 ),

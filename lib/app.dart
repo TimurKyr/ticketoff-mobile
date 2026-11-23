@@ -11,6 +11,7 @@ import 'package:ticketoff_mobile/features/attendees/attendees_screen.dart';
 import 'package:ticketoff_mobile/features/auth/login_screen.dart';
 import 'package:ticketoff_mobile/features/auth/role_selection_screen.dart';
 import 'package:ticketoff_mobile/features/events/events_screen.dart';
+import 'package:ticketoff_mobile/features/guest/guest_screen.dart';
 import 'package:ticketoff_mobile/features/offline/offline_checkin.dart';
 import 'package:ticketoff_mobile/features/offline/offline_store.dart';
 import 'package:ticketoff_mobile/features/scan/scan_screen.dart';
@@ -59,6 +60,7 @@ class _TicketoffAppState extends State<TicketoffApp>
     initialLocation: '/',
     refreshListenable: _isAuthenticated,
     redirect: (context, state) {
+      if (state.matchedLocation == '/guest') return null;
       final authenticated = _isAuthenticated.value;
       final isPublicRoute =
           state.matchedLocation == '/' || state.matchedLocation == '/login';
@@ -86,6 +88,7 @@ class _TicketoffAppState extends State<TicketoffApp>
           },
         ),
       ),
+      GoRoute(path: '/guest', builder: (context, state) => const GuestScreen()),
       GoRoute(
         path: '/login',
         builder: (context, state) => LoginScreen(
@@ -93,71 +96,33 @@ class _TicketoffAppState extends State<TicketoffApp>
           onAuthenticated: _finishAuthentication,
         ),
       ),
-      StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) {
-          final segments = state.uri.pathSegments;
-          return AdminNavigationShell(
-            navigationShell: navigationShell,
-            scanEventId: segments.length == 2 && segments.first == 'scan'
-                ? segments.last
-                : null,
-          );
-        },
-        branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/events',
-                builder: (context, state) => EventsScreen(
-                  eventsRepository: _offline ?? _eventsRepository,
-                  offline: _offline,
-                  onLogout: _logout,
-                ),
-              ),
-            ],
+      GoRoute(
+        path: '/events',
+        builder: (context, state) => EventsScreen(
+          eventsRepository: _offline ?? _eventsRepository,
+          offline: _offline,
+          onLogout: _logout,
+          activeEventId: state.pathParameters['eventId'],
+        ),
+        routes: [
+          GoRoute(
+            path: ':eventId/scan',
+            builder: (context, state) => ScanScreen(
+              key: ValueKey(state.pathParameters['eventId']),
+              eventId: state.pathParameters['eventId']!,
+              repository: _offline ?? _scanRepository,
+              offline: _offline,
+              onLogout: _logout,
+            ),
           ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/scan',
-                builder: (context, state) =>
-                    ScanScreen(repository: _scanRepository, onLogout: _logout),
-                routes: [
-                  GoRoute(
-                    path: ':eventId',
-                    builder: (context, state) => ScanScreen(
-                      key: ValueKey(state.pathParameters['eventId']),
-                      eventId: state.pathParameters['eventId']!,
-                      repository: _offline ?? _scanRepository,
-                      offline: _offline,
-                      onLogout: _logout,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/attendees',
-                builder: (context, state) => AttendeesScreen(
-                  repository: _attendeesRepository,
-                  onLogout: _logout,
-                ),
-                routes: [
-                  GoRoute(
-                    path: ':eventId',
-                    builder: (context, state) => AttendeesScreen(
-                      key: ValueKey(state.pathParameters['eventId']),
-                      eventId: state.pathParameters['eventId']!,
-                      repository: _attendeesRepository,
-                      onLogout: _logout,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          GoRoute(
+            path: ':eventId/attendees',
+            builder: (context, state) => AttendeesScreen(
+              key: ValueKey(state.pathParameters['eventId']),
+              eventId: state.pathParameters['eventId']!,
+              repository: _attendeesRepository,
+              onLogout: _logout,
+            ),
           ),
         ],
       ),
@@ -262,55 +227,6 @@ class _TicketoffAppState extends State<TicketoffApp>
       title: 'Ticketoff',
       theme: AppTheme.light,
       routerConfig: _router,
-    );
-  }
-}
-
-class AdminNavigationShell extends StatelessWidget {
-  const AdminNavigationShell({
-    super.key,
-    required this.navigationShell,
-    this.scanEventId,
-  });
-
-  final StatefulNavigationShell navigationShell;
-  final String? scanEventId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (index) {
-          if (index == 2 && index == navigationShell.currentIndex) return;
-          if (scanEventId case final eventId? when index == 2) {
-            context.go('/attendees/${Uri.encodeComponent(eventId)}');
-            return;
-          }
-          navigationShell.goBranch(
-            index,
-            initialLocation: index == navigationShell.currentIndex,
-          );
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event),
-            label: 'Мероприятия',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.qr_code_scanner_outlined),
-            selectedIcon: Icon(Icons.qr_code_scanner),
-            label: 'Сканер',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Гости',
-          ),
-        ],
-      ),
     );
   }
 }

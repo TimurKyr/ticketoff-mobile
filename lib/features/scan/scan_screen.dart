@@ -12,13 +12,13 @@ import 'package:ticketoff_mobile/features/scan/scan_result.dart';
 class ScanScreen extends StatefulWidget {
   const ScanScreen({
     super.key,
-    this.eventId,
+    required this.eventId,
     required this.repository,
     required this.onLogout,
     this.offline,
   });
 
-  final String? eventId;
+  final String eventId;
   final ScanRepository repository;
   final Future<void> Function() onLogout;
   final OfflineCheckin? offline;
@@ -41,13 +41,12 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   void initState() {
     super.initState();
-    final eventId = widget.eventId;
-    if (eventId != null) unawaited(_loadCount(eventId));
+    unawaited(_loadCount());
   }
 
-  Future<void> _loadCount(String eventId) async {
+  Future<void> _loadCount() async {
     try {
-      final count = await widget.repository.fetchCount(eventId);
+      final count = await widget.repository.fetchCount(widget.eventId);
       if (mounted && !_receivedScanCount) setState(() => _count = count);
     } on Exception {
       // A successful scan provides the authoritative count if stats fail.
@@ -70,7 +69,7 @@ class _ScanScreenState extends State<ScanScreen> {
     setState(() => _pending = true);
 
     try {
-      final result = await widget.repository.scan(widget.eventId!, token);
+      final result = await widget.repository.scan(widget.eventId, token);
       if (!mounted) return;
       _receivedScanCount = true;
       _count = result.count;
@@ -108,7 +107,6 @@ class _ScanScreenState extends State<ScanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasEvent = widget.eventId != null;
     final (color, icon) = switch (_outcome) {
       ScanOutcome.checkedIn => (const Color(0xFF146C36), Icons.check_circle),
       ScanOutcome.alreadyUsed => (
@@ -120,107 +118,95 @@ class _ScanScreenState extends State<ScanScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(hasEvent ? 'Сканирование билетов' : 'Сканер'),
+        title: const Text('Сканирование билетов'),
         actions: [LogoutAction(onLogout: widget.onLogout)],
       ),
       body: SafeArea(
-        child: !hasEvent
-            ? const Center(
-                child: Text(
-                  'Выберите назначенное событие, чтобы начать сканирование',
-                ),
+        child: Column(
+          children: [
+            if (widget.offline case final offline?)
+              ListenableBuilder(
+                listenable: offline,
+                builder: (context, _) =>
+                    _countLabel(offline.countFor(widget.eventId) ?? _count),
               )
-            : Column(
+            else
+              _countLabel(_count),
+            if (widget.offline case final offline?)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: OfflineStatus(offline: offline, eventId: widget.eventId),
+              ),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  if (widget.offline case final offline?)
-                    ListenableBuilder(
-                      listenable: offline,
-                      builder: (context, _) => _countLabel(
-                        offline.countFor(widget.eventId!) ?? _count,
+                  if (TickerMode.valuesOf(context).enabled)
+                    switch (Theme.of(context).platform) {
+                      TargetPlatform.windows ||
+                      TargetPlatform.linux when !kIsWeb => const Center(
+                        child: Text(
+                          'Сканирование камерой недоступно на этом устройстве.',
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                    )
-                  else
-                    _countLabel(_count),
-                  if (widget.offline case final offline?)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: OfflineStatus(
-                        offline: offline,
-                        eventId: widget.eventId!,
-                      ),
+                      _ => _CameraPreview(onToken: _scan),
+                    },
+                  if (_pending)
+                    const ColoredBox(
+                      color: Colors.black54,
+                      child: Center(child: CircularProgressIndicator()),
                     ),
-                  Expanded(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (TickerMode.valuesOf(context).enabled)
-                          switch (Theme.of(context).platform) {
-                            TargetPlatform.windows ||
-                            TargetPlatform.linux when !kIsWeb => const Center(
-                              child: Text(
-                                'Сканирование камерой недоступно на этом устройстве.',
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                            _ => _CameraPreview(onToken: _scan),
-                          },
-                        if (_pending)
-                          const ColoredBox(
-                            color: Colors.black54,
-                            child: Center(child: CircularProgressIndicator()),
-                          ),
-                        if (_message case final message?)
-                          Material(
-                            color: color,
-                            child: InkWell(
-                              onTap: _dismissResult,
-                              child: Center(
-                                child: SingleChildScrollView(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(icon, color: Colors.white, size: 72),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        message,
-                                        textAlign: TextAlign.center,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineMedium
-                                            ?.copyWith(color: Colors.white),
-                                      ),
-                                      if (_ticketDetails case final details?)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 8,
-                                          ),
-                                          child: Text(
-                                            details,
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                            ),
-                                          ),
-                                        ),
-                                      const SizedBox(height: 20),
-                                      const Text(
-                                        'Нажмите, чтобы вернуться к сканеру',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(color: Colors.white),
-                                      ),
-                                    ],
-                                  ),
+                  if (_message case final message?)
+                    Material(
+                      color: color,
+                      child: InkWell(
+                        onTap: _dismissResult,
+                        child: Center(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(icon, color: Colors.white, size: 72),
+                                const SizedBox(height: 16),
+                                Text(
+                                  message,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium
+                                      ?.copyWith(color: Colors.white),
                                 ),
-                              ),
+                                if (_ticketDetails case final details?)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      details,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(height: 20),
+                                const Text(
+                                  'Нажмите, чтобы вернуться к сканеру',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
                             ),
                           ),
-                      ],
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ticketoff_mobile/app.dart';
@@ -194,17 +193,13 @@ void main() {
     expect(find.text('VIP · Отмечен'), findsOneWidget);
     expect(find.text('25%'), findsOneWidget);
 
-    Finder destination(String title) => find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.text(title),
-    );
     final statsRequests = repository.statsRequests;
-    await tester.tap(destination('Мероприятия'));
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    await tester.tap(destination('Гости'));
+    await tester.tap(find.byTooltip('Гости последнего мероприятия'));
     await tester.pumpAndSettle();
     expect(repository.statsRequests, statsRequests + 1);
-    expect(repository.queries.last, 'dana@example.com');
+    expect(repository.queries.last, isEmpty);
   });
 
   testWidgets('manual check-in displays a rejection from the server', (
@@ -238,75 +233,94 @@ void main() {
     expect(find.text('0%'), findsOneWidget);
   });
 
-  testWidgets('controller logs in and sees assigned events', (tester) async {
-    final auth = _FakeAuthGateway();
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    await tester.pumpWidget(
-      TicketoffApp(
-        authGateway: auth,
-        eventsRepository: _FakeEventsRepository([_event()]),
-        scanRepository: _FakeScanRepository(),
-        attendeesRepository: _FakeAttendeesRepository(),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'returning from scanner or guests pins the last event above the list',
+    (tester) async {
+      final auth = _FakeAuthGateway();
+      await tester.pumpWidget(
+        TicketoffApp(
+          authGateway: auth,
+          eventsRepository: _FakeEventsRepository([
+            _event(),
+            _event(id: 'event-2', title: 'Выставка'),
+            for (var i = 3; i <= 10; i++)
+              _event(id: 'event-$i', title: 'Событие $i'),
+          ]),
+          scanRepository: _FakeScanRepository(),
+          attendeesRepository: _FakeAttendeesRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Добро пожаловать!'), findsOneWidget);
-    await tester.tap(find.text('Администратор'));
-    await tester.pumpAndSettle();
+      expect(find.text('Добро пожаловать!'), findsOneWidget);
+      await tester.tap(find.text('Администратор'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Вход контролёра'), findsOneWidget);
-    await tester.enterText(
-      find.byKey(const Key('controller-email')),
-      'controller@example.com',
-    );
-    await tester.enterText(
-      find.byKey(const Key('controller-password')),
-      'password123',
-    );
-    await tester.tap(find.byKey(const Key('login-submit')));
-    await tester.pumpAndSettle();
+      expect(find.text('Вход контролёра'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('controller-email')),
+        'controller@example.com',
+      );
+      await tester.enterText(
+        find.byKey(const Key('controller-password')),
+        'password123',
+      );
+      await tester.tap(find.byKey(const Key('login-submit')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Мероприятия'), findsWidgets);
-    expect(find.text('Концерт'), findsOneWidget);
-    expect(find.text('Зал А'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.text('Мероприятия'), findsOneWidget);
+      expect(find.text('Концерт'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      final pinned = find.byKey(const Key('pinned-event'));
+      expect(pinned, findsNothing);
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationBar),
-        matching: find.text('Сканер'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Выберите назначенное событие, чтобы начать сканирование'),
-      findsOneWidget,
-    );
+      await tester.tap(find.byKey(const Key('assigned-event-event-2')));
+      await tester.pumpAndSettle();
+      expect(find.text('Сканирование билетов'), findsOneWidget);
+      expect(find.text('Отмечено 2 из 5'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Мероприятия'), findsOneWidget);
+      Finder pinnedTitle(String title) =>
+          find.descendant(of: pinned, matching: find.text(title));
+      expect(pinnedTitle('Выставка'), findsOneWidget);
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationBar),
-        matching: find.text('Мероприятия'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('assigned-event-event-1')));
-    await tester.pumpAndSettle();
-    expect(find.text('Сканирование билетов'), findsOneWidget);
-    expect(find.text('Отмечено 2 из 5'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('event-guests-event-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Dana'), findsOneWidget);
+      expect(find.text('25%'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Мероприятия'), findsOneWidget);
+      expect(pinnedTitle('Концерт'), findsOneWidget);
+      expect(pinnedTitle('Выставка'), findsNothing);
+      expect(find.byKey(const Key('assigned-event-event-1')), findsOneWidget);
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationBar),
-        matching: find.text('Гости'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Dana'), findsOneWidget);
-    expect(find.text('25%'), findsOneWidget);
-  });
+      final list = find.byKey(const Key('assigned-events-list'));
+      final pinnedPosition = tester.getTopLeft(pinned);
+      await tester.drag(list, const Offset(0, -400));
+      await tester.pumpAndSettle();
+      final scrollable = find.descendant(
+        of: list,
+        matching: find.byType(Scrollable),
+      );
+      expect(
+        tester.state<ScrollableState>(scrollable).position.pixels,
+        greaterThan(0),
+      );
+      expect(tester.getTopLeft(pinned), pinnedPosition);
+
+      await tester.tap(find.byTooltip('Сканер последнего мероприятия'));
+      await tester.pumpAndSettle();
+      expect(find.text('Сканирование билетов'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(pinnedTitle('Концерт'), findsOneWidget);
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.windows}),
+  );
 
   testWidgets('restores saved controller session on startup', (tester) async {
     await tester.pumpWidget(
@@ -319,7 +333,7 @@ void main() {
 
     expect(find.text('Концерт'), findsOneWidget);
     expect(find.text('Добро пожаловать!'), findsNothing);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
   });
 
   testWidgets('shows an empty state when controller has no assigned events', (
@@ -385,18 +399,25 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
   });
 
-  testWidgets('guest selection does not navigate away', (tester) async {
-    await tester.pumpWidget(
-      TicketoffApp(
-        authGateway: _FakeAuthGateway(),
-        eventsRepository: _FakeEventsRepository(const []),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Гость'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'guest selection opens Ticketoff and can return to role selection',
+    (tester) async {
+      await tester.pumpWidget(
+        TicketoffApp(
+          authGateway: _FakeAuthGateway(),
+          eventsRepository: _FakeEventsRepository(const []),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Гость'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Добро пожаловать!'), findsOneWidget);
-    expect(find.text('Вход контролёра'), findsNothing);
-  });
+      expect(find.text('Открыть Ticketoff в браузере'), findsOneWidget);
+      expect(find.text('Вход контролёра'), findsNothing);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Добро пожаловать!'), findsOneWidget);
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.windows}),
+  );
 }

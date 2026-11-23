@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppTheme {
-  static const brand = Color(0xFFFB923C);
-  static const brandDeep = Color(0xFFC2410C);
-  static const navy = Color(0xFF1B2338);
-  static const tint = Color(0xFFFFF1E3);
-  static const muted = Color(0xFF5F6577);
-  static const background = Color(0xFFF7F6F4);
-  static const line = Color(0xFFE7E4DF);
+  static const navy = Color(0xFF1A1A18);
+  static const brand = navy;
+  static const brandDeep = navy;
+  static const tint = Color(0xFFF5F4F1);
+  static const muted = Color(0xFF4B5563);
+  static const background = Color(0xFFF2F1EE);
+  static const line = Color(0xFFE4E1DA);
   static const freeBackground = Color(0xFFE3F5EA);
   static const free = Color(0xFF0F7B45);
 
@@ -15,16 +15,18 @@ abstract final class AppTheme {
     colorScheme: ColorScheme.fromSeed(
       seedColor: brand,
       primary: brand,
-      onPrimary: navy,
+      onPrimary: Colors.white,
       secondary: brandDeep,
       onSecondary: Colors.white,
       surface: Colors.white,
       onSurface: navy,
     ),
     scaffoldBackgroundColor: background,
+    dividerColor: line,
     useMaterial3: true,
     appBarTheme: const AppBarTheme(
-      backgroundColor: background,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
       foregroundColor: navy,
       elevation: 0,
       centerTitle: false,
@@ -34,9 +36,13 @@ abstract final class AppTheme {
         fontWeight: FontWeight.w700,
       ),
     ),
+    navigationBarTheme: const NavigationBarThemeData(
+      backgroundColor: Colors.white,
+      indicatorColor: tint,
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
+      fillColor: tint,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -58,7 +64,7 @@ abstract final class AppTheme {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: brand,
-        foregroundColor: navy,
+        foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(54),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
