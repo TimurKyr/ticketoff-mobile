@@ -12,6 +12,10 @@ enum ScanOutcome {
 
   final String apiValue;
   final String label;
+
+  static ScanOutcome fromApi(Object? value) =>
+      values.where((outcome) => outcome.apiValue == value).firstOrNull ??
+      (throw const FormatException('Invalid check-in outcome'));
 }
 
 class CheckinCount {
@@ -26,22 +30,22 @@ class ScanResult {
   final CheckinCount count;
   final String? attendeeName;
   final String? ticketType;
+  final bool offline;
 
   const ScanResult({
     required this.outcome,
     required this.count,
     this.attendeeName,
     this.ticketType,
+    this.offline = false,
   });
 
   factory ScanResult.fromJson(Map<String, dynamic> json) {
-    final outcome = ScanOutcome.values
-        .where((outcome) => outcome.apiValue == json['result'])
-        .firstOrNull;
+    final outcome = ScanOutcome.fromApi(json['result']);
     final checkedIn = json['checked_in_count'];
     final total = json['total_count'];
     final ticket = json['ticket'];
-    if (outcome == null || checkedIn is! int || total is! int) {
+    if (checkedIn is! int || total is! int) {
       throw const FormatException('Invalid check-in response');
     }
     if (outcome == ScanOutcome.checkedIn &&
