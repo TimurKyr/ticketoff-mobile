@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
 import 'package:ticketoff_mobile/features/offline/offline_api.dart';
 import 'package:ticketoff_mobile/features/offline/offline_checkin.dart';
@@ -34,27 +35,30 @@ class OfflineStatus extends StatelessWidget {
             runSpacing: 4,
             children: [
               if (offline.isOffline)
-                const Text(
-                  'Офлайн',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                Text(
+                  context.t(AppText.offline),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               if (pack != null)
                 Text(
                   pack.available
-                      ? 'Пакет от ${_formatDownloadTime(context, pack.generatedAt)}'
-                      : 'Пакет недоступен',
+                      ? context.t(
+                          AppText.packDate,
+                          _formatDownloadTime(context, pack.generatedAt),
+                        )
+                      : context.t(AppText.packUnavailable),
                 ),
               if (pack != null || offline.isOffline)
-                Text('Не отправлено: $pending'),
+                Text(context.t(AppText.unsent, pending)),
             ],
           ),
           if (syncError != null)
             Text(
-              syncError,
+              context.localizedMessage(syncError),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           if (offline.isOffline && pack == null)
-            const Text('Офлайн-пакет не скачан'),
+            Text(context.t(AppText.packNotDownloaded)),
           Wrap(
             spacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -67,24 +71,26 @@ class OfflineStatus extends StatelessWidget {
                   icon: const Icon(Icons.download_outlined),
                   label: Text(
                     downloading
-                        ? 'Скачиваем…'
+                        ? context.t(AppText.downloading)
                         : pack?.available == true
-                        ? 'Обновить пакет'
-                        : 'Скачать для офлайна',
+                        ? context.t(AppText.updatePack)
+                        : context.t(AppText.downloadPack),
                   ),
                 ),
               if (pending > 0 && pack!.available)
                 TextButton(
                   onPressed: offline.isSyncing ? null : offline.syncNow,
                   child: Text(
-                    offline.isSyncing ? 'Синхронизируем…' : 'Синхронизировать',
+                    offline.isSyncing
+                        ? context.t(AppText.syncing)
+                        : context.t(AppText.sync),
                   ),
                 ),
               if (offline.hasConflicts(eventId))
                 TextButton.icon(
                   onPressed: () => _showConflicts(context),
                   icon: const Icon(Icons.warning_amber_rounded),
-                  label: const Text('Конфликты'),
+                  label: Text(context.t(AppText.conflicts)),
                 ),
             ],
           ),
@@ -98,9 +104,9 @@ class OfflineStatus extends StatelessWidget {
       await offline.download(event);
     } on OfflineRequestFailure catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.localizedMessage(error.message))),
+      );
     }
   }
 
@@ -109,7 +115,7 @@ class OfflineStatus extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Конфликты синхронизации'),
+        title: Text(context.t(AppText.syncConflicts)),
         content: SizedBox(
           width: double.maxFinite,
           height: 260,
@@ -117,7 +123,7 @@ class OfflineStatus extends StatelessWidget {
             future: conflicts,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const Text('Не удалось загрузить конфликты');
+                return Text(context.t(AppText.loadConflictsFailure));
               }
               final items = snapshot.data;
               if (items == null) {
@@ -140,7 +146,7 @@ class OfflineStatus extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Закрыть'),
+            child: Text(context.t(AppText.close)),
           ),
         ],
       ),
@@ -148,16 +154,19 @@ class OfflineStatus extends StatelessWidget {
   }
 
   String _description(BuildContext context, SyncItem item) {
-    if (item.outcome != ScanOutcome.alreadyUsed) return item.outcome.label;
+    if (item.outcome != ScanOutcome.alreadyUsed) {
+      return context.localizedMessage(item.outcome.label);
+    }
     final timestamp = item.checkedInAt;
-    final time = timestamp == null
-        ? ''
-        : ' в ${_formatTime(context, timestamp)}';
+    final time = timestamp == null ? '' : _formatTime(context, timestamp);
     final source = item.checkedInDeviceId == null
-        ? 'онлайн или вручную'
-        : 'на другом устройстве';
+        ? context.t(AppText.checkInSourceOnline)
+        : context.t(AppText.checkInSourceDevice);
     final actor = item.checkedInBy == null ? '' : ' (${item.checkedInBy})';
-    return 'Уже прошёл$time $source$actor';
+    if (context.isKazakh) {
+      return '$source кіргені белгіленген${time.isEmpty ? '' : ' ($time)'}$actor';
+    }
+    return 'Уже прошёл${time.isEmpty ? '' : ' в $time'} $source$actor';
   }
 
   static String _formatDownloadTime(BuildContext context, DateTime value) {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 import 'package:ticketoff_mobile/features/auth/logout_action.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
@@ -68,8 +70,11 @@ class _EventsScreenState extends State<EventsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Мероприятия'),
-        actions: [LogoutAction(onLogout: widget.onLogout)],
+        title: Text(context.t(AppText.events)),
+        actions: [
+          const LanguageSelector(),
+          LogoutAction(onLogout: widget.onLogout),
+        ],
       ),
       body: SafeArea(
         child: FutureBuilder<List<AssignedEvent>>(
@@ -82,14 +87,16 @@ class _EventsScreenState extends State<EventsScreen> {
             }
             if (snapshot.hasError) {
               final message = snapshot.error is EventLoadFailure
-                  ? (snapshot.error! as EventLoadFailure).message
-                  : 'Не удалось загрузить назначенные события';
+                  ? context.localizedMessage(
+                      (snapshot.error! as EventLoadFailure).message,
+                    )
+                  : context.t(AppText.loadAssignedEvents);
               return _MessageState(
                 icon: Icons.cloud_off_outlined,
                 message: message,
                 action: TextButton(
                   onPressed: _retry,
-                  child: const Text('Повторить'),
+                  child: Text(context.t(AppText.retry)),
                 ),
               );
             }
@@ -99,8 +106,8 @@ class _EventsScreenState extends State<EventsScreen> {
               return _MessageState(
                 icon: Icons.event_busy_outlined,
                 message: widget.offline?.isOffline == true
-                    ? 'Офлайн. Нет скачанных событий'
-                    : 'Вас пока не назначили ни на одно событие',
+                    ? context.t(AppText.noOfflineEvents)
+                    : context.t(AppText.noAssignedEvents),
               );
             }
 
@@ -144,7 +151,7 @@ class _PinnedEvent extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       child: Card(
         child: ListTile(
-          title: const Text('Последнее мероприятие'),
+          title: Text(context.t(AppText.recentEvent)),
           subtitle: Text(
             event.title,
             maxLines: 2,
@@ -155,12 +162,12 @@ class _PinnedEvent extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: 'Сканер последнего мероприятия',
+                tooltip: context.t(AppText.recentEventScanner),
                 onPressed: () => _openEvent(context, event, 'scan'),
                 icon: const Icon(Icons.qr_code_scanner),
               ),
               IconButton(
-                tooltip: 'Гости последнего мероприятия',
+                tooltip: context.t(AppText.recentEventAttendees),
                 onPressed: () => _openEvent(context, event, 'attendees'),
                 icon: const Icon(Icons.people_outline),
               ),
@@ -223,7 +230,7 @@ class _EventCard extends StatelessWidget {
                 text:
                     event.venueLabel ??
                     event.venueMessage ??
-                    'Площадка не указана',
+                    context.t(AppText.noVenue),
               ),
               if (offline case final controller?)
                 Padding(
@@ -240,7 +247,7 @@ class _EventCard extends StatelessWidget {
                   key: Key('event-guests-${event.id}'),
                   onPressed: () => _openEvent(context, event, 'attendees'),
                   icon: const Icon(Icons.people_outline),
-                  label: const Text('Гости события'),
+                  label: Text(context.t(AppText.eventAttendees)),
                 ),
               ),
             ],

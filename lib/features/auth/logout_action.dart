@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ticketoff_mobile/core/api/auth_service.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
 
 class LogoutAction extends StatelessWidget {
   const LogoutAction({super.key, required this.onLogout});
@@ -11,9 +12,9 @@ class LogoutAction extends StatelessWidget {
       await onLogout();
     } on SessionFailure catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.localizedMessage(error.message))),
+      );
     }
   }
 
@@ -21,7 +22,7 @@ class LogoutAction extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       key: const Key('logout'),
-      tooltip: 'Выйти',
+      tooltip: context.t(AppText.signOut),
       onPressed: () => _logout(context),
       icon: const Icon(Icons.logout_rounded),
     );

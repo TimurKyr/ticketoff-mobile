@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ticketoff_mobile/core/api/auth_service.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
 import 'package:ticketoff_mobile/core/api/dio_client.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
 import 'package:ticketoff_mobile/core/storage/secure_storage.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 import 'package:ticketoff_mobile/features/attendees/attendees_screen.dart';
@@ -37,6 +40,9 @@ class TicketoffApp extends StatefulWidget {
 class _TicketoffAppState extends State<TicketoffApp>
     with WidgetsBindingObserver {
   final ValueNotifier<bool?> _isAuthenticated = ValueNotifier(null);
+  AppLanguage _language = AppLanguage.russian;
+  bool _languageSelected = false;
+  Future<void> _languageSave = Future.value();
   String? _sessionRestoreError;
   OfflineCheckin? _offline;
   late final _offlineStore = OfflineStore();
@@ -133,7 +139,37 @@ class _TicketoffAppState extends State<TicketoffApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _restoreLanguage();
     _restoreSession();
+  }
+
+  Future<void> _restoreLanguage() async {
+    try {
+      final language = AppLanguage.fromCode(
+        await _secureStorage.readLanguage(),
+      );
+      if (mounted && !_languageSelected && language != _language) {
+        setState(() => _language = language);
+      }
+    } on PlatformException {
+      // Keep the default if device preferences cannot be read.
+    } on MissingPluginException {
+      // Storage is unavailable on this host.
+    }
+  }
+
+  void _selectLanguage(AppLanguage language) {
+    _languageSelected = true;
+    if (language != _language) setState(() => _language = language);
+    _languageSave = _languageSave.then((_) async {
+      try {
+        await _secureStorage.writeLanguage(language.locale.languageCode);
+      } on PlatformException {
+        // The selected language still applies to the running app.
+      } on MissingPluginException {
+        // Storage is unavailable on this host.
+      }
+    });
   }
 
   Future<void> _restoreSession() async {
@@ -227,6 +263,11 @@ class _TicketoffAppState extends State<TicketoffApp>
       title: 'Ticketoff',
       theme: AppTheme.light,
       routerConfig: _router,
+      locale: _language.locale,
+      supportedLocales: AppLanguage.values.map((language) => language.locale),
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      builder: (context, child) =>
+          LanguageSettings(onChanged: _selectLanguage, child: child!),
     );
   }
 }
@@ -249,15 +290,22 @@ class _SessionRestoreError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(actions: const [LanguageSelector()]),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(message, textAlign: TextAlign.center),
+              Text(
+                context.localizedMessage(message),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 12),
-              FilledButton(onPressed: onRetry, child: const Text('Повторить')),
+              FilledButton(
+                onPressed: onRetry,
+                child: Text(context.t(AppText.retry)),
+              ),
             ],
           ),
         ),

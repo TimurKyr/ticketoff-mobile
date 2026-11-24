@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
@@ -8,6 +10,7 @@ class RoleSelectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(actions: const [LanguageSelector()]),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -33,7 +36,7 @@ class RoleSelectionScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 32),
                   Text(
-                    'Добро пожаловать!',
+                    context.t(AppText.welcome),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       color: AppTheme.navy,
                       fontWeight: FontWeight.w800,
@@ -41,7 +44,7 @@ class RoleSelectionScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Выберите, как продолжить',
+                    context.t(AppText.chooseRole),
                     style: Theme.of(
                       context,
                     ).textTheme.bodyLarge?.copyWith(color: AppTheme.muted),
@@ -49,15 +52,15 @@ class RoleSelectionScreen extends StatelessWidget {
                   const SizedBox(height: 32),
                   _RoleCard(
                     icon: Icons.person_outline_rounded,
-                    title: 'Гость',
-                    description: 'Просмотр мероприятий',
+                    title: context.t(AppText.guest),
+                    description: context.t(AppText.browseEvents),
                     onTap: () => context.push('/guest'),
                   ),
                   const SizedBox(height: 14),
                   _RoleCard(
                     icon: Icons.admin_panel_settings_outlined,
-                    title: 'Администратор',
-                    description: 'Управление мероприятиями и билетами',
+                    title: context.t(AppText.administrator),
+                    description: context.t(AppText.manageEvents),
                     onTap: () => context.go('/login'),
                   ),
                 ],

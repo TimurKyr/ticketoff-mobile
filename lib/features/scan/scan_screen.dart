@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
 import 'package:ticketoff_mobile/features/auth/logout_action.dart';
 import 'package:ticketoff_mobile/features/offline/offline_checkin.dart';
 import 'package:ticketoff_mobile/features/offline/offline_status.dart';
@@ -118,8 +120,11 @@ class _ScanScreenState extends State<ScanScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Сканирование билетов'),
-        actions: [LogoutAction(onLogout: widget.onLogout)],
+        title: Text(context.t(AppText.scanningTickets)),
+        actions: [
+          const LanguageSelector(),
+          LogoutAction(onLogout: widget.onLogout),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -144,9 +149,9 @@ class _ScanScreenState extends State<ScanScreen> {
                   if (TickerMode.valuesOf(context).enabled)
                     switch (Theme.of(context).platform) {
                       TargetPlatform.windows ||
-                      TargetPlatform.linux when !kIsWeb => const Center(
+                      TargetPlatform.linux when !kIsWeb => Center(
                         child: Text(
-                          'Сканирование камерой недоступно на этом устройстве.',
+                          context.t(AppText.cameraUnavailable),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -171,7 +176,7 @@ class _ScanScreenState extends State<ScanScreen> {
                                 Icon(icon, color: Colors.white, size: 72),
                                 const SizedBox(height: 16),
                                 Text(
-                                  message,
+                                  context.localizedMessage(message),
                                   textAlign: TextAlign.center,
                                   style: Theme.of(context)
                                       .textTheme
@@ -191,10 +196,10 @@ class _ScanScreenState extends State<ScanScreen> {
                                     ),
                                   ),
                                 const SizedBox(height: 20),
-                                const Text(
-                                  'Нажмите, чтобы вернуться к сканеру',
+                                Text(
+                                  context.t(AppText.backToScanner),
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.white),
+                                  style: const TextStyle(color: Colors.white),
                                 ),
                               ],
                             ),
@@ -214,9 +219,9 @@ class _ScanScreenState extends State<ScanScreen> {
   Widget _countLabel(CheckinCount? count) => Padding(
     padding: const EdgeInsets.all(12),
     child: Text(
-      count == null
-          ? 'Отмечено — из —'
-          : 'Отмечено ${count.checkedIn} из ${count.total}',
+      context.isKazakh
+          ? 'Кіргендер: ${count?.checkedIn ?? '—'} / ${count?.total ?? '—'}'
+          : 'Отмечено ${count?.checkedIn ?? '—'} из ${count?.total ?? '—'}',
       style: Theme.of(context).textTheme.titleMedium,
     ),
   );
@@ -278,12 +283,13 @@ class _CameraPreviewState extends State<_CameraPreview>
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Text(switch (error.errorCode) {
-                MobileScannerErrorCode.permissionDenied =>
-                  'Нет доступа к камере. Разрешите доступ в настройках '
-                      'приложения и снова откройте сканер.',
-                MobileScannerErrorCode.unsupported =>
-                  'Сканирование камерой недоступно на этом устройстве.',
-                _ => 'Не удалось запустить камеру. Снова откройте сканер.',
+                MobileScannerErrorCode.permissionDenied => context.t(
+                  AppText.cameraDenied,
+                ),
+                MobileScannerErrorCode.unsupported => context.t(
+                  AppText.cameraUnavailable,
+                ),
+                _ => context.t(AppText.cameraFailure),
               }, textAlign: TextAlign.center),
             ),
           ),
@@ -300,8 +306,8 @@ class _CameraPreviewState extends State<_CameraPreview>
               }
               return IconButton.filled(
                 tooltip: torch == TorchState.on
-                    ? 'Выключить фонарик'
-                    : 'Включить фонарик',
+                    ? context.t(AppText.torchOff)
+                    : context.t(AppText.torchOn),
                 onPressed: _controller.toggleTorch,
                 icon: Icon(
                   torch == TorchState.on ? Icons.flash_on : Icons.flash_off,
