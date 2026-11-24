@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
 import 'package:ticketoff_mobile/features/attendees/attendee.dart';
 import 'package:ticketoff_mobile/features/auth/logout_action.dart';
 import 'package:ticketoff_mobile/features/scan/scan_result.dart';
@@ -130,20 +132,24 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
   Future<void> _changeCheckIn(Attendee attendee) async {
     if (_pendingTicketId != null) return;
     final undo = attendee.status == TicketStatus.checkedIn;
-    final action = undo ? 'Отменить отметку' : 'Отметить вход';
+    final action = undo
+        ? context.t(AppText.undoCheckIn)
+        : context.t(AppText.confirmCheckIn);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('$action?'),
+        title: Text(
+          context.t(undo ? AppText.undoQuestion : AppText.checkInQuestion),
+        ),
         content: Text(
           undo
-              ? '${attendee.name} сможет снова пройти по этому билету.'
+              ? context.t(AppText.undoDetails, attendee.name)
               : '${attendee.name} · ${attendee.ticketType}',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Назад'),
+            child: Text(context.t(AppText.back)),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -167,9 +173,9 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
       final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(
         SnackBar(
-          content: Text(error.message),
+          content: Text(context.localizedMessage(error.message)),
           action: SnackBarAction(
-            label: 'Повторить',
+            label: context.t(AppText.retry),
             onPressed: () {
               // The server may have applied the change before the connection
               // dropped. Read the current status before another mutation.
@@ -186,9 +192,9 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
   Future<TicketStatus?> _checkIn(String ticketId) async {
     final result = await widget.repository.checkInTicket(ticketId);
     if (!mounted) return null;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.outcome.label)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.localizedMessage(result.outcome.label))),
+    );
     return switch (result.outcome) {
       ScanOutcome.checkedIn ||
       ScanOutcome.alreadyUsed => TicketStatus.checkedIn,
@@ -220,14 +226,15 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
     final eventId = widget.eventId;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Гости'),
+        title: Text(context.t(AppText.attendees)),
         actions: [
           IconButton(
-            tooltip: 'Открыть сканер события',
+            tooltip: context.t(AppText.openEventScanner),
             onPressed: () =>
                 context.go('/events/${Uri.encodeComponent(eventId)}/scan'),
             icon: const Icon(Icons.qr_code_scanner),
           ),
+          const LanguageSelector(),
           LogoutAction(onLogout: widget.onLogout),
         ],
       ),
@@ -256,9 +263,9 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: TextField(
                 key: const Key('attendees-search'),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  labelText: 'Имя или email',
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  labelText: context.t(AppText.nameOrEmail),
                 ),
                 keyboardType: TextInputType.text,
                 textInputAction: TextInputAction.search,
@@ -309,7 +316,9 @@ class _AttendeesScreenState extends State<AttendeesScreen> {
         padding: const EdgeInsets.all(16),
         child: Center(
           child: Text(
-            _query.isEmpty ? 'На событии пока нет гостей' : 'Гости не найдены',
+            _query.isEmpty
+                ? context.t(AppText.noAttendees)
+                : context.t(AppText.attendeesNotFound),
           ),
         ),
       );
@@ -334,8 +343,16 @@ class _StatsPanel extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            Expanded(child: Text('Зарегистрировано\n${stats.registered}')),
-            Expanded(child: Text('Отмечено\n${stats.checkedIn}')),
+            Expanded(
+              child: Text(
+                '${context.t(AppText.registered)}\n${stats.registered}',
+              ),
+            ),
+            Expanded(
+              child: Text(
+                '${context.t(AppText.checkedInCount)}\n${stats.checkedIn}',
+              ),
+            ),
             Text('$percent%', style: Theme.of(context).textTheme.titleLarge),
           ],
         ),
@@ -368,17 +385,19 @@ class _AttendeeCard extends StatelessWidget {
             Text(attendee.name, style: Theme.of(context).textTheme.titleMedium),
             if (attendee.email case final email? when email.isNotEmpty)
               Text(email),
-            Text('${attendee.ticketType} · ${attendee.status.label}'),
+            Text(
+              '${attendee.ticketType} · ${context.localizedMessage(status.label)}',
+            ),
             if (status == TicketStatus.valid || canUndo)
               TextButton.icon(
                 onPressed: onAction,
                 icon: Icon(canUndo ? Icons.undo : Icons.how_to_reg_outlined),
                 label: Text(
                   pending
-                      ? 'Сохраняем…'
+                      ? context.t(AppText.saving)
                       : canUndo
-                      ? 'Отменить отметку'
-                      : 'Отметить вход',
+                      ? context.t(AppText.undoCheckIn)
+                      : context.t(AppText.confirmCheckIn),
                 ),
               ),
           ],
@@ -400,8 +419,8 @@ class _RetryNotice extends StatelessWidget {
       padding: const EdgeInsets.all(8),
       child: Column(
         children: [
-          Text(message, textAlign: TextAlign.center),
-          TextButton(onPressed: onRetry, child: const Text('Повторить')),
+          Text(context.localizedMessage(message), textAlign: TextAlign.center),
+          TextButton(onPressed: onRetry, child: Text(context.t(AppText.retry))),
         ],
       ),
     );

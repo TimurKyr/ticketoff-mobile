@@ -11,6 +11,7 @@ class SecureStorage implements TokenStorage {
     : _storage = storage ?? const FlutterSecureStorage();
 
   static const _tokenKey = 'access_token';
+  static const _languageKey = 'interface_language';
 
   final FlutterSecureStorage _storage;
 
@@ -23,4 +24,9 @@ class SecureStorage implements TokenStorage {
 
   @override
   Future<void> clearToken() => _storage.delete(key: _tokenKey);
+
+  Future<String?> readLanguage() => _storage.read(key: _languageKey);
+
+  Future<void> writeLanguage(String code) =>
+      _storage.write(key: _languageKey, value: code);
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ticketoff_mobile/app.dart';
 import 'package:ticketoff_mobile/core/api/auth_service.dart';
@@ -132,6 +133,80 @@ AssignedEvent _event({
 }
 
 void main() {
+  testWidgets('language follows the controller and survives an app restart', (
+    tester,
+  ) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+    final auth = _FakeAuthGateway();
+    Widget buildApp() => TicketoffApp(
+      authGateway: auth,
+      eventsRepository: _FakeEventsRepository([_event()]),
+      attendeesRepository: _FakeAttendeesRepository(),
+    );
+
+    Future<void> selectLanguage(String label) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('language-selector')),
+          matching: find.widgetWithText(TextButton, label),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextButton, 'Рус'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Қаз'), findsOneWidget);
+    await selectLanguage('Қаз');
+    expect(find.text('Қош келдіңіз!'), findsOneWidget);
+    expect(find.text('Қонақ'), findsOneWidget);
+    await tester.tap(find.text('Әкімші'));
+    await tester.pumpAndSettle();
+    expect(find.text('Бақылаушының кіруі'), findsOneWidget);
+    final submit = find.byKey(const Key('login-submit'));
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(find.text('Құпиясөзді енгізіңіз'), findsOneWidget);
+    await selectLanguage('Рус');
+    expect(find.text('Введите пароль'), findsOneWidget);
+    await selectLanguage('Қаз');
+
+    await tester.enterText(
+      find.byKey(const Key('controller-email')),
+      'controller@example.com',
+    );
+    await tester.enterText(
+      find.byKey(const Key('controller-password')),
+      'password123',
+    );
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(find.text('Іс-шаралар'), findsWidgets);
+    expect(find.text('Іс-шара қонақтары'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('event-guests-event-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('VIP · Белгіленген'), findsOneWidget);
+
+    await selectLanguage('Рус');
+    expect(find.text('Имя или email'), findsOneWidget);
+    expect(find.text('VIP · Отмечен'), findsOneWidget);
+    await selectLanguage('Қаз');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Соңғы іс-шара'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('logout')));
+    await tester.pumpAndSettle();
+    expect(find.text('Қош келдіңіз!'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+    expect(find.text('Қош келдіңіз!'), findsOneWidget);
+  });
+
   testWidgets('guests retry, search, undo, check in and refresh on return', (
     tester,
   ) async {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ticketoff_mobile/core/api/auth_service.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -55,16 +57,20 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Widget _validationError(BuildContext context, String message) =>
+      Text(context.localizedMessage(message), maxLines: 2);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Назад',
+          tooltip: context.t(AppText.back),
           onPressed: () => context.go('/'),
           icon: const Icon(Icons.arrow_back_rounded),
         ),
-        title: const Text('Вход контролёра'),
+        actions: const [LanguageSelector()],
+        title: Text(context.t(AppText.controllerSignIn)),
       ),
       body: SafeArea(
         child: Center(
@@ -93,7 +99,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Рады вас видеть',
+                      context.t(AppText.welcomeBack),
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(
                             color: AppTheme.navy,
@@ -101,9 +107,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Войдите, чтобы увидеть назначенные события',
-                      style: TextStyle(color: AppTheme.muted),
+                    Text(
+                      context.t(AppText.signInForEvents),
+                      style: const TextStyle(color: AppTheme.muted),
                     ),
                     const SizedBox(height: 28),
                     TextFormField(
@@ -112,13 +118,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       autocorrect: false,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined),
+                      decoration: InputDecoration(
+                        labelText: context.t(AppText.email),
+                        prefixIcon: const Icon(Icons.email_outlined),
                       ),
                       validator: (value) => value == null || value.isEmpty
-                          ? 'Введите email'
+                          ? AppText.enterEmail.russian
                           : null,
+                      errorBuilder: _validationError,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -128,12 +135,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) => _login(),
                       decoration: InputDecoration(
-                        labelText: 'Пароль',
+                        labelText: context.t(AppText.password),
                         prefixIcon: const Icon(Icons.key_rounded),
                         suffixIcon: IconButton(
                           tooltip: _obscurePassword
-                              ? 'Показать пароль'
-                              : 'Скрыть пароль',
+                              ? context.t(AppText.showPassword)
+                              : context.t(AppText.hidePassword),
                           onPressed: () => setState(
                             () => _obscurePassword = !_obscurePassword,
                           ),
@@ -145,13 +152,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       validator: (value) => value == null || value.isEmpty
-                          ? 'Введите пароль'
+                          ? AppText.enterPassword.russian
                           : null,
+                      errorBuilder: _validationError,
                     ),
                     if (_loginError != null) ...[
                       const SizedBox(height: 14),
                       Text(
-                        _loginError!,
+                        context.localizedMessage(_loginError!),
                         key: const Key('login-error'),
                         style: const TextStyle(color: Color(0xFFB42318)),
                       ),
@@ -166,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               height: 22,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Войти'),
+                          : Text(context.t(AppText.signIn)),
                     ),
                   ],
                 ),
