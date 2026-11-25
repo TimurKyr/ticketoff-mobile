@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -24,6 +26,8 @@ class _GuestScreenState extends State<GuestScreen> {
   WebViewController? _webView;
   Uri _lastPage = _site;
   bool _loading = true;
+  bool _languageReady = false;
+  int _webLanguageRevision = 0;
   bool _failed = false;
   bool _canGoBack = false;
   bool _saving = false;
@@ -63,6 +67,10 @@ class _GuestScreenState extends State<GuestScreen> {
       await webView.addJavaScriptChannel(
         'TicketoffDownload',
         onMessageReceived: _saveDocument,
+      );
+      await webView.addJavaScriptChannel(
+        'TicketoffLanguage',
+        onMessageReceived: _applyWebLanguage,
       );
       if (webView.platform case final AndroidWebViewController android) {
         await android.setOnShowFileSelector(_pickFiles);
@@ -109,14 +117,49 @@ class _GuestScreenState extends State<GuestScreen> {
     if (!mounted || _failed) return;
     await _rememberPage(url);
     if (!mounted || _failed) return;
-    setState(() => _loading = false);
     final uri = Uri.tryParse(url);
     if (uri != null && _isSite(uri)) {
       try {
+        final preferred = _languageReady
+            ? null
+            : context.language.locale.languageCode;
+        final reloading = await _webView?.runJavaScriptReturningResult(
+          '$_languageHandler(${jsonEncode(preferred)})',
+        );
+        if (reloading == true || reloading == 'true') return;
         await _webView?.runJavaScript(_downloadHandler);
       } on Exception {
         // A navigation may replace the page during script installation.
       }
+    }
+    if (!mounted || _failed) return;
+    setState(() {
+      _languageReady = true;
+      _loading = false;
+    });
+  }
+
+  Future<void> _applyWebLanguage(JavaScriptMessage message) async {
+    if (!mounted || !_languageReady) return;
+    final language = AppLanguage.values
+        .where((option) => option.locale.languageCode == message.message)
+        .firstOrNull;
+    if (language == null) return;
+    final revision = ++_webLanguageRevision;
+    try {
+      final url = Uri.tryParse(await _webView?.currentUrl() ?? '');
+      if (!mounted ||
+          revision != _webLanguageRevision ||
+          url == null ||
+          !_isSite(url) ||
+          language == context.language) {
+        return;
+      }
+      context.getInheritedWidgetOfExactType<LanguageSettings>()?.onChanged(
+        language,
+      );
+    } on PlatformException {
+      // The WebView may have closed while we were checking its URL.
     }
   }
 
@@ -163,7 +206,7 @@ class _GuestScreenState extends State<GuestScreen> {
     } on PlatformException {
       // Report the same message for an unavailable handler.
     }
-    _message('Не удалось открыть ссылку');
+    _message(AppText.linkOpenFailed);
   }
 
   Future<List<String>> _pickFiles(FileSelectorParams params) async {
@@ -174,7 +217,7 @@ class _GuestScreenState extends State<GuestScreen> {
           }) ??
           const [];
     } on PlatformException {
-      _message('Не удалось выбрать файлы');
+      _message(AppText.filePickFailed);
       return const [];
     }
   }
@@ -189,7 +232,7 @@ class _GuestScreenState extends State<GuestScreen> {
       if (!mounted || url == null || !_isSite(url)) return;
       final data = jsonDecode(message.message);
       if (data is! Map || data['error'] == true) {
-        _message('Не удалось скачать файл');
+        _message(AppText.fileDownloadFailed);
         return;
       }
       final name = data['name'];
@@ -210,17 +253,19 @@ class _GuestScreenState extends State<GuestScreen> {
         'bytes': bytes,
       });
     } on FormatException {
-      _message('Не удалось скачать файл');
+      _message(AppText.fileDownloadFailed);
     } on PlatformException {
-      _message('Не удалось сохранить файл');
+      _message(AppText.fileSaveFailed);
     } finally {
       _saving = false;
     }
   }
 
-  void _message(String text) {
+  void _message(AppText text) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.t(text))));
     }
   }
 
@@ -234,11 +279,11 @@ class _GuestScreenState extends State<GuestScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Гость'),
+          title: Text(context.t(AppText.guest)),
           leading: BackButton(onPressed: _back),
           actions: [
             IconButton(
-              tooltip: 'Открыть в браузере',
+              tooltip: context.t(AppText.openInBrowser),
               onPressed: () => _openBrowser(_lastPage),
               icon: const Icon(Icons.open_in_new),
             ),
@@ -255,15 +300,17 @@ class _GuestScreenState extends State<GuestScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (_failed) ...[
-                          const Text('Не удалось загрузить Ticketoff'),
+                          Text(context.t(AppText.ticketoffLoadFailed)),
                           TextButton(
                             onPressed: _retry,
-                            child: const Text('Повторить'),
+                            child: Text(context.t(AppText.retry)),
                           ),
                         ],
                         TextButton(
                           onPressed: () => _openBrowser(_lastPage),
-                          child: const Text('Открыть Ticketoff в браузере'),
+                          child: Text(
+                            context.t(AppText.openTicketoffInBrowser),
+                          ),
                         ),
                       ],
                     ),
@@ -273,6 +320,8 @@ class _GuestScreenState extends State<GuestScreen> {
                   fit: StackFit.expand,
                   children: [
                     WebViewWidget(controller: webView),
+                    if (!_languageReady)
+                      const ColoredBox(color: AppTheme.background),
                     if (_loading)
                       const Align(
                         alignment: Alignment.topCenter,
@@ -285,6 +334,37 @@ class _GuestScreenState extends State<GuestScreen> {
     );
   }
 }
+
+// Ticketoff Web reads this preference when its I18nProvider mounts and
+// publishes subsequent selections on the document's lang attribute.
+const _languageHandler = r'''
+((preferred) => {
+  if (location.origin !== 'https://ticketoff.store') return false;
+  const root = document.documentElement;
+  try {
+    const key = 'ticketoff.lang';
+    if (preferred && localStorage.getItem(key) !== preferred) {
+      localStorage.setItem(key, preferred);
+      if (root.lang !== preferred) {
+        setTimeout(() => location.reload(), 0);
+        return true;
+      }
+    }
+  } catch (_) {
+    // The site's own language selector works even when storage is unavailable.
+  }
+  if (!window.ticketoffMobileLanguage) {
+    window.ticketoffMobileLanguage = new MutationObserver(() => {
+      TicketoffLanguage.postMessage(root.lang);
+    });
+    window.ticketoffMobileLanguage.observe(root, {
+      attributes: true,
+      attributeFilter: ['lang'],
+    });
+  }
+  return false;
+})
+''';
 
 // The web app creates temporary blob URLs for authenticated PDFs and support
 // attachments. Read them inside the same origin before the app revokes them.

@@ -627,6 +627,18 @@ void main() {
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('Добро пожаловать!'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'EN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Guest'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Guest'), findsOneWidget);
+      expect(find.byTooltip('Open in browser'), findsOneWidget);
+      expect(find.text('Open Ticketoff in browser'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome!'), findsOneWidget);
     },
     variant: const TargetPlatformVariant({TargetPlatform.windows}),
   );

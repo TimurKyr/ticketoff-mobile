@@ -27,6 +27,37 @@ enum AppText {
     'Choose how to continue',
   ),
   guest('Гость', 'Қонақ', 'Guest'),
+  openInBrowser('Открыть в браузере', 'Браузерде ашу', 'Open in browser'),
+  openTicketoffInBrowser(
+    'Открыть Ticketoff в браузере',
+    'Ticketoff сайтын браузерде ашу',
+    'Open Ticketoff in browser',
+  ),
+  ticketoffLoadFailed(
+    'Не удалось загрузить Ticketoff',
+    'Ticketoff сайтын жүктеу мүмкін болмады',
+    'Could not load Ticketoff',
+  ),
+  linkOpenFailed(
+    'Не удалось открыть ссылку',
+    'Сілтемені ашу мүмкін болмады',
+    'Could not open the link',
+  ),
+  filePickFailed(
+    'Не удалось выбрать файлы',
+    'Файлдарды таңдау мүмкін болмады',
+    'Could not select files',
+  ),
+  fileDownloadFailed(
+    'Не удалось скачать файл',
+    'Файлды жүктеп алу мүмкін болмады',
+    'Could not download the file',
+  ),
+  fileSaveFailed(
+    'Не удалось сохранить файл',
+    'Файлды сақтау мүмкін болмады',
+    'Could not save the file',
+  ),
   browseEvents('Просмотр мероприятий', 'Іс-шараларды қарау', 'Browse events'),
   administrator('Администратор', 'Әкімші', 'Administrator'),
   manageEvents(
