@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/stable_localized_text.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
 import 'package:ticketoff_mobile/features/offline/offline_api.dart';
 import 'package:ticketoff_mobile/features/offline/offline_checkin.dart';
@@ -35,30 +36,33 @@ class OfflineStatus extends StatelessWidget {
             runSpacing: 4,
             children: [
               if (offline.isOffline)
-                Text(
-                  context.t(AppText.offline),
+                StableLocalizedText(
+                  AppText.offline.inLanguage,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               if (pack != null)
-                Text(
+                StableLocalizedText(
                   pack.available
-                      ? context.t(
-                          AppText.packDate,
-                          _formatDownloadTime(context, pack.generatedAt),
+                      ? (language) => AppText.packDate.inLanguage(
+                          language,
+                          _formatDownloadTime(pack.generatedAt),
                         )
-                      : context.t(AppText.packUnavailable),
+                      : AppText.packUnavailable.inLanguage,
                 ),
               if (pack != null || offline.isOffline)
-                Text(context.t(AppText.unsent, pending)),
+                StableLocalizedText(
+                  (language) => AppText.unsent.inLanguage(language, pending),
+                ),
             ],
           ),
           if (syncError != null)
-            Text(
-              context.localizedMessage(syncError),
+            StableLocalizedText(
+              (language) =>
+                  context.localizedMessage(syncError, forLanguage: language),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           if (offline.isOffline && pack == null)
-            Text(context.t(AppText.packNotDownloaded)),
+            StableLocalizedText(AppText.packNotDownloaded.inLanguage),
           Wrap(
             spacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -69,28 +73,28 @@ class OfflineStatus extends StatelessWidget {
                       ? null
                       : () => _download(context, download),
                   icon: const Icon(Icons.download_outlined),
-                  label: Text(
-                    downloading
-                        ? context.t(AppText.downloading)
-                        : pack?.available == true
-                        ? context.t(AppText.updatePack)
-                        : context.t(AppText.downloadPack),
+                  label: StableLocalizedText(
+                    (downloading
+                            ? AppText.downloading
+                            : pack?.available == true
+                            ? AppText.updatePack
+                            : AppText.downloadPack)
+                        .inLanguage,
                   ),
                 ),
               if (pending > 0 && pack!.available)
                 TextButton(
                   onPressed: offline.isSyncing ? null : offline.syncNow,
-                  child: Text(
-                    offline.isSyncing
-                        ? context.t(AppText.syncing)
-                        : context.t(AppText.sync),
+                  child: StableLocalizedText(
+                    (offline.isSyncing ? AppText.syncing : AppText.sync)
+                        .inLanguage,
                   ),
                 ),
               if (offline.hasConflicts(eventId))
                 TextButton.icon(
                   onPressed: () => _showConflicts(context),
                   icon: const Icon(Icons.warning_amber_rounded),
-                  label: Text(context.t(AppText.conflicts)),
+                  label: StableLocalizedText(AppText.conflicts.inLanguage),
                 ),
             ],
           ),
@@ -163,16 +167,23 @@ class OfflineStatus extends StatelessWidget {
         ? context.t(AppText.checkInSourceOnline)
         : context.t(AppText.checkInSourceDevice);
     final actor = item.checkedInBy == null ? '' : ' (${item.checkedInBy})';
-    if (context.isKazakh) {
-      return '$source кіргені белгіленген${time.isEmpty ? '' : ' ($time)'}$actor';
-    }
-    return 'Уже прошёл${time.isEmpty ? '' : ' в $time'} $source$actor';
+    return switch (context.language) {
+      AppLanguage.russian =>
+        'Уже прошёл${time.isEmpty ? '' : ' в $time'} $source$actor',
+      AppLanguage.kazakh =>
+        '$source кіргені белгіленген${time.isEmpty ? '' : ' ($time)'}$actor',
+      AppLanguage.english =>
+        'Already checked in${time.isEmpty ? '' : ' at $time'} $source$actor',
+    };
   }
 
-  static String _formatDownloadTime(BuildContext context, DateTime value) {
+  static String _formatDownloadTime(DateTime value) {
     final local = value.toLocal();
-    final date = MaterialLocalizations.of(context).formatCompactDate(local);
-    return '$date, ${_formatTime(context, value)}';
+    String twoDigits(int part) => part.toString().padLeft(2, '0');
+    final date =
+        '${twoDigits(local.day)}.${twoDigits(local.month)}.${local.year}';
+    final time = '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+    return '$date, $time';
   }
 
   static String _formatTime(BuildContext context, DateTime value) =>
