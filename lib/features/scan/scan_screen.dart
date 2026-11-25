@@ -216,15 +216,19 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  Widget _countLabel(CheckinCount? count) => Padding(
-    padding: const EdgeInsets.all(12),
-    child: Text(
-      context.isKazakh
-          ? 'Кіргендер: ${count?.checkedIn ?? '—'} / ${count?.total ?? '—'}'
-          : 'Отмечено ${count?.checkedIn ?? '—'} из ${count?.total ?? '—'}',
-      style: Theme.of(context).textTheme.titleMedium,
-    ),
-  );
+  Widget _countLabel(CheckinCount? count) {
+    final checkedIn = count?.checkedIn.toString() ?? '—';
+    final total = count?.total.toString() ?? '—';
+    final label = switch (context.language) {
+      AppLanguage.russian => 'Отмечено $checkedIn из $total',
+      AppLanguage.kazakh => 'Кіргендер: $checkedIn / $total',
+      AppLanguage.english => 'Checked in: $checkedIn of $total',
+    };
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Text(label, style: Theme.of(context).textTheme.titleMedium),
+    );
+  }
 }
 
 class _CameraPreview extends StatefulWidget {

@@ -2,19 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:ticketoff_mobile/core/l10n/app_text.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 
-enum AppLanguage {
-  russian(Locale('ru'), 'Рус', 'Русский'),
-  kazakh(Locale('kk'), 'Қаз', 'Қазақша');
-
-  const AppLanguage(this.locale, this.shortLabel, this.label);
-
-  final Locale locale;
-  final String shortLabel;
-  final String label;
-
-  static AppLanguage fromCode(String? code) => code == 'kk' ? kazakh : russian;
-}
-
 class LanguageSettings extends InheritedWidget {
   const LanguageSettings({
     super.key,
@@ -37,9 +24,7 @@ class LanguageSelector extends StatelessWidget {
     final settings = context
         .dependOnInheritedWidgetOfExactType<LanguageSettings>();
     if (settings == null) return const SizedBox.shrink();
-    final language = AppLanguage.fromCode(
-      Localizations.localeOf(context).languageCode,
-    );
+    final language = context.language;
     return Semantics(
       key: const Key('language-selector'),
       label: context.t(AppText.language),

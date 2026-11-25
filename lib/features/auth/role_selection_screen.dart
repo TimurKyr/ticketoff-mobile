@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ticketoff_mobile/core/l10n/app_text.dart';
 import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
+import 'package:ticketoff_mobile/core/l10n/stable_localized_text.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
@@ -35,16 +36,16 @@ class RoleSelectionScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  Text(
-                    context.t(AppText.welcome),
+                  StableLocalizedText(
+                    AppText.welcome.inLanguage,
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       color: AppTheme.navy,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    context.t(AppText.chooseRole),
+                  StableLocalizedText(
+                    AppText.chooseRole.inLanguage,
                     style: Theme.of(
                       context,
                     ).textTheme.bodyLarge?.copyWith(color: AppTheme.muted),
@@ -52,15 +53,15 @@ class RoleSelectionScreen extends StatelessWidget {
                   const SizedBox(height: 32),
                   _RoleCard(
                     icon: Icons.person_outline_rounded,
-                    title: context.t(AppText.guest),
-                    description: context.t(AppText.browseEvents),
+                    title: AppText.guest,
+                    description: AppText.browseEvents,
                     onTap: () => context.push('/guest'),
                   ),
                   const SizedBox(height: 14),
                   _RoleCard(
                     icon: Icons.admin_panel_settings_outlined,
-                    title: context.t(AppText.administrator),
-                    description: context.t(AppText.manageEvents),
+                    title: AppText.administrator,
+                    description: AppText.manageEvents,
                     onTap: () => context.go('/login'),
                   ),
                 ],
@@ -82,13 +83,14 @@ class _RoleCard extends StatelessWidget {
   });
 
   final IconData icon;
-  final String title;
-  final String description;
+  final AppText title;
+  final AppText description;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -110,8 +112,8 @@ class _RoleCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
+                    StableLocalizedText(
+                      title.inLanguage,
                       style: const TextStyle(
                         color: AppTheme.navy,
                         fontSize: 17,
@@ -119,8 +121,8 @@ class _RoleCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      description,
+                    StableLocalizedText(
+                      description.inLanguage,
                       style: const TextStyle(color: AppTheme.muted),
                     ),
                   ],

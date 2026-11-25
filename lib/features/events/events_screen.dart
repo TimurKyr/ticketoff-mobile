@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
 import 'package:ticketoff_mobile/core/l10n/app_text.dart';
 import 'package:ticketoff_mobile/core/l10n/language_selector.dart';
+import 'package:ticketoff_mobile/core/l10n/stable_localized_text.dart';
 import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 import 'package:ticketoff_mobile/features/auth/logout_action.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
@@ -86,17 +87,21 @@ class _EventsScreenState extends State<EventsScreen> {
               );
             }
             if (snapshot.hasError) {
-              final message = snapshot.error is EventLoadFailure
-                  ? context.localizedMessage(
-                      (snapshot.error! as EventLoadFailure).message,
-                    )
-                  : context.t(AppText.loadAssignedEvents);
+              final error = snapshot.error;
               return _MessageState(
                 icon: Icons.cloud_off_outlined,
-                message: message,
+                message: error is EventLoadFailure
+                    ? (language) => context.localizedMessage(
+                        error.message,
+                        forLanguage: language,
+                      )
+                    : AppText.loadAssignedEvents.inLanguage,
                 action: TextButton(
                   onPressed: _retry,
-                  child: Text(context.t(AppText.retry)),
+                  child: StableLocalizedText(
+                    AppText.retry.inLanguage,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               );
             }
@@ -105,9 +110,11 @@ class _EventsScreenState extends State<EventsScreen> {
             if (events.isEmpty) {
               return _MessageState(
                 icon: Icons.event_busy_outlined,
-                message: widget.offline?.isOffline == true
-                    ? context.t(AppText.noOfflineEvents)
-                    : context.t(AppText.noAssignedEvents),
+                message:
+                    (widget.offline?.isOffline == true
+                            ? AppText.noOfflineEvents
+                            : AppText.noAssignedEvents)
+                        .inLanguage,
               );
             }
 
@@ -151,7 +158,7 @@ class _PinnedEvent extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       child: Card(
         child: ListTile(
-          title: Text(context.t(AppText.recentEvent)),
+          title: StableLocalizedText(AppText.recentEvent.inLanguage),
           subtitle: Text(
             event.title,
             maxLines: 2,
@@ -191,6 +198,8 @@ class _EventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const detailStyle = TextStyle(color: AppTheme.muted);
+    final venue = event.venueLabel ?? event.venueMessage;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -222,15 +231,17 @@ class _EventCard extends StatelessWidget {
               const SizedBox(height: 12),
               _EventDetail(
                 icon: Icons.calendar_today_outlined,
-                text: _formatDate(event.startAt),
+                child: Text(_formatDate(event.startAt), style: detailStyle),
               ),
               const SizedBox(height: 8),
               _EventDetail(
                 icon: Icons.location_on_outlined,
-                text:
-                    event.venueLabel ??
-                    event.venueMessage ??
-                    context.t(AppText.noVenue),
+                child: venue == null
+                    ? StableLocalizedText(
+                        AppText.noVenue.inLanguage,
+                        style: detailStyle,
+                      )
+                    : Text(venue, style: detailStyle),
               ),
               if (offline case final controller?)
                 Padding(
@@ -247,7 +258,7 @@ class _EventCard extends StatelessWidget {
                   key: Key('event-guests-${event.id}'),
                   onPressed: () => _openEvent(context, event, 'attendees'),
                   icon: const Icon(Icons.people_outline),
-                  label: Text(context.t(AppText.eventAttendees)),
+                  label: StableLocalizedText(AppText.eventAttendees.inLanguage),
                 ),
               ),
             ],
@@ -268,10 +279,10 @@ class _EventCard extends StatelessWidget {
 }
 
 class _EventDetail extends StatelessWidget {
-  const _EventDetail({required this.icon, required this.text});
+  const _EventDetail({required this.icon, required this.child});
 
   final IconData icon;
-  final String text;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -279,9 +290,7 @@ class _EventDetail extends StatelessWidget {
       children: [
         Icon(icon, size: 18, color: AppTheme.brandDeep),
         const SizedBox(width: 8),
-        Expanded(
-          child: Text(text, style: const TextStyle(color: AppTheme.muted)),
-        ),
+        Expanded(child: child),
       ],
     );
   }
@@ -291,7 +300,7 @@ class _MessageState extends StatelessWidget {
   const _MessageState({required this.icon, required this.message, this.action});
 
   final IconData icon;
-  final String message;
+  final String Function(AppLanguage) message;
   final Widget? action;
 
   @override
@@ -304,7 +313,7 @@ class _MessageState extends StatelessWidget {
           children: [
             Icon(icon, size: 48, color: AppTheme.brandDeep),
             const SizedBox(height: 16),
-            Text(
+            StableLocalizedText(
               message,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(

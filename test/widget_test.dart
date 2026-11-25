@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ticketoff_mobile/app.dart';
 import 'package:ticketoff_mobile/core/api/auth_service.dart';
 import 'package:ticketoff_mobile/core/api/checkin_service.dart';
+import 'package:ticketoff_mobile/core/l10n/app_text.dart';
+import 'package:ticketoff_mobile/core/l10n/stable_localized_text.dart';
+import 'package:ticketoff_mobile/core/theme/app_theme.dart';
 import 'package:ticketoff_mobile/features/attendees/attendee.dart';
+import 'package:ticketoff_mobile/features/auth/role_selection_screen.dart';
 import 'package:ticketoff_mobile/features/events/assigned_event.dart';
+import 'package:ticketoff_mobile/features/events/events_screen.dart';
+import 'package:ticketoff_mobile/features/offline/offline_checkin.dart';
+import 'package:ticketoff_mobile/features/offline/offline_models.dart';
+import 'package:ticketoff_mobile/features/offline/offline_status.dart';
 import 'package:ticketoff_mobile/features/scan/scan_result.dart';
 
 class _FakeScanRepository implements ScanRepository {
@@ -47,6 +56,36 @@ class _FakeEventsRepository implements AssignedEventsRepository {
 
   @override
   Future<List<AssignedEvent>> fetchMyEvents() async => events;
+}
+
+class _LayoutOfflineCheckin extends Fake implements OfflineCheckin {
+  _LayoutOfflineCheckin(this.pack);
+
+  final OfflineEvent pack;
+
+  @override
+  bool get isOffline => false;
+
+  @override
+  bool get isSyncing => false;
+
+  @override
+  OfflineEvent? packFor(String eventId) => pack;
+
+  @override
+  bool isDownloading(String eventId) => false;
+
+  @override
+  bool hasConflicts(String eventId) => true;
+
+  @override
+  String? syncError(String eventId) => null;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }
 
 class _FakeAttendeesRepository implements AttendeesRepository {
@@ -133,7 +172,83 @@ AssignedEvent _event({
 }
 
 void main() {
-  testWidgets('language follows the controller and survives an app restart', (
+  testWidgets('role and event cards keep their layout in all three languages', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final event = _event(
+      title: 'Final match and awards ceremony for all visiting teams',
+      venueName: null,
+    );
+    final offline = _LayoutOfflineCheckin(
+      OfflineEvent(
+        event: event,
+        generatedAt: DateTime.utc(2026, 11, 25, 13, 42),
+        count: const CheckinCount(2, 5),
+        pending: 2,
+        available: true,
+      ),
+    );
+    final eventsScreen = EventsScreen(
+      eventsRepository: _FakeEventsRepository([event]),
+      offline: offline,
+      activeEventId: event.id,
+      onLogout: () async {},
+    );
+
+    Future<List<Rect>> verifyLayout(
+      Widget screen,
+      List<Finder> elements,
+    ) async {
+      final layouts = <List<Rect>>[];
+      for (final language in AppLanguage.values) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light,
+            locale: language.locale,
+            supportedLocales: AppLanguage.values.map((option) => option.locale),
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            home: screen,
+          ),
+        );
+        await tester.pumpAndSettle();
+        layouts.add(elements.map(tester.getRect).toList());
+      }
+      expect(layouts.skip(1), everyElement(equals(layouts.first)));
+      return layouts.first;
+    }
+
+    for (final width in [320.0, 420.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      final roleLayout = await verifyLayout(const RoleSelectionScreen(), [
+        find.byType(StableLocalizedText).at(0),
+        find.byType(StableLocalizedText).at(1),
+        find.descendant(
+          of: find.byType(Card).at(0),
+          matching: find.byType(InkWell),
+        ),
+        find.descendant(
+          of: find.byType(Card).at(1),
+          matching: find.byType(InkWell),
+        ),
+      ]);
+      expect(
+        roleLayout.map((rect) => rect.left),
+        everyElement(roleLayout.first.left),
+      );
+      await verifyLayout(eventsScreen, [
+        find.byKey(const Key('pinned-event')),
+        find.byKey(const Key('assigned-event-event-1')),
+        find.byType(OfflineStatus),
+        find.byKey(const Key('event-guests-event-1')),
+      ]);
+    }
+  });
+
+  testWidgets('all three languages work and English survives an app restart', (
     tester,
   ) async {
     FlutterSecureStorage.setMockInitialValues({});
@@ -143,6 +258,7 @@ void main() {
       authGateway: auth,
       eventsRepository: _FakeEventsRepository([_event()]),
       attendeesRepository: _FakeAttendeesRepository(),
+      scanRepository: _FakeScanRepository(),
     );
 
     Future<void> selectLanguage(String label) async {
@@ -159,6 +275,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextButton, 'Рус'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Қаз'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'EN'), findsOneWidget);
+    await selectLanguage('EN');
+    expect(find.text('Welcome!'), findsOneWidget);
+    expect(find.text('Guest'), findsOneWidget);
+    expect(find.text('Administrator'), findsOneWidget);
     await selectLanguage('Қаз');
     expect(find.text('Қош келдіңіз!'), findsOneWidget);
     expect(find.text('Қонақ'), findsOneWidget);
@@ -171,6 +292,9 @@ void main() {
     expect(find.text('Құпиясөзді енгізіңіз'), findsOneWidget);
     await selectLanguage('Рус');
     expect(find.text('Введите пароль'), findsOneWidget);
+    await selectLanguage('EN');
+    expect(find.text('Controller login'), findsOneWidget);
+    expect(find.text('Enter your password'), findsOneWidget);
     await selectLanguage('Қаз');
 
     await tester.enterText(
@@ -190,6 +314,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('VIP · Белгіленген'), findsOneWidget);
 
+    await selectLanguage('EN');
+    expect(find.text('Name or email'), findsOneWidget);
+    expect(find.text('VIP · Checked in'), findsOneWidget);
     await selectLanguage('Рус');
     expect(find.text('Имя или email'), findsOneWidget);
     expect(find.text('VIP · Отмечен'), findsOneWidget);
@@ -197,15 +324,23 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.text('Соңғы іс-шара'), findsOneWidget);
+    await selectLanguage('EN');
+    expect(find.text('Most recent event'), findsOneWidget);
+    await tester.tap(find.byTooltip('Scan tickets for the most recent event'));
+    await tester.pumpAndSettle();
+    expect(find.text('Scan tickets'), findsOneWidget);
+    expect(find.text('Checked in: 2 of 5'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('logout')));
     await tester.pumpAndSettle();
-    expect(find.text('Қош келдіңіз!'), findsOneWidget);
+    expect(find.text('Welcome!'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
-    expect(find.text('Қош келдіңіз!'), findsOneWidget);
-  });
+    expect(find.text('Welcome!'), findsOneWidget);
+  }, variant: const TargetPlatformVariant({TargetPlatform.windows}));
 
   testWidgets('guests retry, search, undo, check in and refresh on return', (
     tester,
